@@ -66,7 +66,7 @@ st.markdown(
 )
 
 
-# 3. Carga de Datos
+# 3. Carga y Limpieza de Datos
 @st.cache_data
 def load_data():
     file_name = "1 julio internacion_2.XLSX"
@@ -78,44 +78,96 @@ def load_data():
             if "julio" in f.lower() and f.endswith((".xlsx", ".XLSX")):
                 file_name = f
                 break
-    return pd.read_excel(file_name)
+
+    df_raw = pd.read_excel(file_name)
+
+    # Eliminar filas y columnas completamente vacías
+    df_raw = df_raw.dropna(how="all").dropna(how="all", axis=1)
+
+    # Sanitizar nombres de columnas
+    clean_cols = []
+    for c in df_raw.columns:
+        if pd.isna(c) or str(c).strip().lower() == "nan":
+            clean_cols.append("Columna_Sin_Nombre")
+        else:
+            clean_cols.append(str(c).strip())
+    df_raw.columns = clean_cols
+
+    return df_raw
 
 
 try:
     df = load_data()
 
-    # Limpiar espacios en nombres de columnas
-    df.columns = df.columns.astype(str).str.strip()
-
-    # Identificación precisa de columnas por nombre o posición
-    sociedad_col = None
-    for col in df.columns:
-        if "sociedad" in str(col).strip().lower():
-            sociedad_col = col
-            break
-    if not sociedad_col and len(df.columns) > 13:
-        sociedad_col = df.columns[13]
-
-    tm_col = None
-    for col in df.columns:
-        if "tm mes real" in str(col).strip().lower():
-            tm_col = col
-            break
-    if not tm_col and len(df.columns) > 28:
-        tm_col = df.columns[28]
-
-    # Limpieza estricta de nulos en columnas esenciales
-    df = df.dropna(subset=["Pedido"]).copy()
-    df[sociedad_col] = df[sociedad_col].fillna("Sin Sociedad").astype(str)
-    df["Unidad de negocio"] = (
-        df["Unidad de negocio"].fillna("Sin Info").astype(str)
+    # Identificar columna para 'Pedido'
+    pedido_col = next(
+        (c for c in df.columns if "pedido" in c.lower()), df.columns[0]
     )
-    df["Tipo de carga"] = df["Tipo de carga"].fillna("Sin Info").astype(str)
-    df["Nombre Grupo art."] = (
-        df["Nombre Grupo art."].fillna("Sin Info").astype(str)
+
+    # Eliminar registros donde Pedido sea nulo o inválido
+    df = df[df[pedido_col].notna()].copy()
+    df[pedido_col] = df[pedido_col].astype(str).str.strip()
+    df = df[
+        ~df[pedido_col].isin(["nan", "None", "", "Columna_Sin_Nombre"])
+    ].copy()
+
+    # Identificar columna de 'Sociedad' (Columna N)
+    sociedad_col = next(
+        (c for c in df.columns if "sociedad" in c.lower()),
+        df.columns[min(13, len(df.columns) - 1)],
     )
-    df["Denominación"] = df["Denominación"].fillna("Sin Info").astype(str)
-    df["Nombre 1"] = df["Nombre 1"].fillna("Sin Info").astype(str)
+
+    # Identificar columna de 'TM MES REAL' (Columna AC)
+    tm_col = next(
+        (c for c in df.columns if "tm mes real" in c.lower()),
+        next(
+            (c for c in df.columns if "tm" in c.lower()),
+            df.columns[min(28, len(df.columns) - 1)],
+        ),
+    )
+
+    # Identificar otras columnas requeridas con respaldo de posición
+    unid_col = next(
+        (c for c in df.columns if "unidad de negocio" in c.lower()),
+        df.columns[min(1, len(df.columns) - 1)],
+    )
+    carga_col = next(
+        (c for c in df.columns if "tipo de carga" in c.lower()),
+        df.columns[min(2, len(df.columns) - 1)],
+    )
+    grupo_col = next(
+        (c for c in df.columns if "grupo art" in c.lower()),
+        df.columns[min(3, len(df.columns) - 1)],
+    )
+    denom_col = next(
+        (c for c in df.columns if "denominación" in c.lower()),
+        df.columns[min(4, len(df.columns) - 1)],
+    )
+    prov_col = next(
+        (c for c in df.columns if "nombre 1" in c.lower()),
+        df.columns[min(5, len(df.columns) - 1)],
+    )
+
+    val_est_col = next(
+        (c for c in df.columns if "estimado" in c.lower()),
+        df.columns[min(6, len(df.columns) - 1)],
+    )
+    val_real_col = next(
+        (c for c in df.columns if "valor real" in c.lower()),
+        df.columns[min(7, len(df.columns) - 1)],
+    )
+    dif_col = next(
+        (c for c in df.columns if "diferencia" in c.lower()),
+        df.columns[min(8, len(df.columns) - 1)],
+    )
+
+    # Reemplazar valores nulos en textos
+    for c in [sociedad_col, unid_col, carga_col, grupo_col, denom_col, prov_col]:
+        df[c] = df[c].fillna("Sin Información").astype(str).str.strip()
+
+    # Convertir valores numéricos
+    for c in [tm_col, val_est_col, val_real_col, dif_col]:
+        df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
 
     # 4. Sidebar - Encabezado con Logo y Filtros
     if os.path.exists("logo1.png"):
@@ -135,32 +187,34 @@ try:
 
     st.sidebar.subheader("🔍 Filtros de Búsqueda")
 
-    # Filtros dinámicos
-    unidades_opt = sorted([x for x in df["Unidad de negocio"].unique() if x])
+    # Opciones de Filtros
+    unidades_opt = sorted([x for x in df[unid_col].unique() if str(x) != "nan"])
     unidades = st.sidebar.multiselect(
         "Unidad de Negocio", options=unidades_opt, default=unidades_opt
     )
 
-    cargas_opt = sorted([x for x in df["Tipo de carga"].unique() if x])
+    cargas_opt = sorted([x for x in df[carga_col].unique() if str(x) != "nan"])
     cargas = st.sidebar.multiselect(
         "Tipo de Carga", options=cargas_opt, default=cargas_opt
     )
 
-    grupos_opt = sorted([x for x in df["Nombre Grupo art."].unique() if x])
+    grupos_opt = sorted([x for x in df[grupo_col].unique() if str(x) != "nan"])
     grupos = st.sidebar.multiselect(
         "Nombre Grupo art.", options=grupos_opt, default=grupos_opt
     )
 
-    sociedades_opt = sorted([x for x in df[sociedad_col].unique() if x])
+    sociedades_opt = sorted(
+        [x for x in df[sociedad_col].unique() if str(x) != "nan"]
+    )
     sociedades = st.sidebar.multiselect(
         "Sociedad", options=sociedades_opt, default=sociedades_opt
     )
 
-    # Aplicar filtros
+    # Filtrar datos
     df_filtered = df[
-        (df["Unidad de negocio"].isin(unidades))
-        & (df["Tipo de carga"].isin(cargas))
-        & (df["Nombre Grupo art."].isin(grupos))
+        (df[unid_col].isin(unidades))
+        & (df[carga_col].isin(cargas))
+        & (df[grupo_col].isin(grupos))
         & (df[sociedad_col].isin(sociedades))
     ].copy()
 
@@ -179,22 +233,21 @@ try:
             "No hay registros disponibles para los filtros seleccionados."
         )
     else:
-        # 6. Agrupación por Pedido (Primera línea de TM MES REAL por Pedido)
+        # 6. Agrupación por Pedido tomando la primera línea para TM MES REAL
         detalle_pedido = (
-            df_filtered.groupby("Pedido", as_index=False)
+            df_filtered.groupby(pedido_col, as_index=False)
             .agg(
-                Denominación=("Denominación", "first"),
-                Proveedor=("Nombre 1", "first"),
+                Denominación=(denom_col, "first"),
+                Proveedor=(prov_col, "first"),
                 Sociedad=(sociedad_col, "first"),
-                Unidad_Negocio=("Unidad de negocio", "first"),
-                Tipo_Carga=("Tipo de carga", "first"),
-                Grupo_Articulo=("Nombre Grupo art.", "first"),
+                Unidad_Negocio=(unid_col, "first"),
+                Tipo_Carga=(carga_col, "first"),
+                Grupo_Articulo=(grupo_col, "first"),
                 TM_Real=(tm_col, "first"),
-                Valor_Estimado_USD=("Valor Estimado $", "sum"),
-                Valor_Real_USD=("Valor Real $", "sum"),
-                Diferencia_USD=("Diferencia $", "sum"),
+                Valor_Estimado_USD=(val_est_col, "sum"),
+                Valor_Real_USD=(val_real_col, "sum"),
+                Diferencia_USD=(dif_col, "sum"),
             )
-            .dropna(subset=["Grupo_Articulo"])
         )
 
         detalle_pedido["TM_Real"] = pd.to_numeric(
@@ -205,7 +258,7 @@ try:
         ).fillna(0)
 
         # 7. Indicadores (KPIs)
-        total_oc = detalle_pedido["Pedido"].nunique()
+        total_oc = detalle_pedido[pedido_col].nunique()
         total_tm_real = detalle_pedido["TM_Real"].sum()
         total_monto_real = detalle_pedido["Valor_Real_USD"].sum()
         total_monto_est = detalle_pedido["Valor_Estimado_USD"].sum()
@@ -227,16 +280,14 @@ try:
 
         st.markdown("---")
 
-        # 8. Gráfico de Barras por Grupo de Artículo
+        # 8. Gráfico por Grupo de Artículo
         grp_art = (
             detalle_pedido.groupby("Grupo_Articulo", as_index=False)
             .agg(
                 TM_Real=("TM_Real", "sum"),
                 Valor_Real_USD=("Valor_Real_USD", "sum"),
             )
-            .dropna(subset=["Grupo_Articulo"])
         )
-
         grp_art["Ratio_USD_TM"] = (
             grp_art["Valor_Real_USD"] / grp_art["TM_Real"]
         ).fillna(0)
@@ -275,7 +326,7 @@ try:
 
         st.plotly_chart(fig, use_container_width=True)
 
-        # 9. Tabla Detallada
+        # 9. Tabla Detallada Limpia
         st.subheader("📋 Detalle de Costos por Pedido (OC) y Denominación")
 
         detalle_tabla = detalle_pedido.copy()
@@ -294,18 +345,19 @@ try:
             "Ratio ($/TM)",
         ]
 
-        st.dataframe(
-            detalle_tabla.style.format(
-                {
-                    "TM Mes Real": "{:,.2f}",
-                    "Valor Est. ($)": "${:,.2f}",
-                    "Valor Real ($)": "${:,.2f}",
-                    "Diferencia ($)": "${:,.2f}",
-                    "Ratio ($/TM)": "${:,.2f}",
-                }
-            ),
-            use_container_width=True,
-        )
+        # Formato limpio sin depender del formatter estricto
+        for col in [
+            "Valor Est. ($)",
+            "Valor Real ($)",
+            "Diferencia ($)",
+            "Ratio ($/TM)",
+        ]:
+            detalle_tabla[col] = detalle_tabla[col].map("${:,.2f}".format)
+
+        for col in ["TM Mes Real"]:
+            detalle_tabla[col] = detalle_tabla[col].map("{:,.2f}".format)
+
+        st.dataframe(detalle_tabla, use_container_width=True)
 
 except Exception as e:
     st.error(f"Error al cargar la aplicación: {e}")
