@@ -98,9 +98,11 @@ def load_data():
 try:
     df = load_data()
 
-    # 4. Sidebar - Encabezado y Filtros
+    # 4. Sidebar - Encabezado con Logo y Filtros
     if os.path.exists("logo1.png"):
         st.sidebar.image("logo1.png", use_container_width=True)
+    elif os.path.exists("logo.png"):
+        st.sidebar.image("logo.png", use_container_width=True)
     else:
         st.sidebar.markdown(
             """
@@ -111,8 +113,6 @@ try:
         """,
             unsafe_allow_html=True,
         )
-
-    st.sidebar.subheader("🔍 Filtros de Búsqueda")
 
     st.sidebar.subheader("🔍 Filtros de Búsqueda")
 
@@ -140,7 +140,7 @@ try:
         "País de Origen", options=paises_opt, default=paises_opt
     )
 
-    # Aplicar filtros
+    # Aplicar filtros al DataFrame
     df_filtered = df[
         (df["Unidad de negocio"].isin(unidades))
         & (df["Tipo de carga"].isin(cargas))
@@ -158,17 +158,47 @@ try:
         unsafe_allow_html=True,
     )
 
-    # 6. Cálculos de Indicadores (KPIs)
-    total_oc = df_filtered["Pedido"].nunique()
-    total_tm_recibida = df_filtered["Ctd. TM Recibida"].sum()
-    total_monto_real = df_filtered["Valor Real $"].sum()
-    total_monto_est = df_filtered["Valor Estimado $"].sum()
+    # 6. Agrupación por Pedido (Regla: Primera línea para TM de Pedido)
+    detalle_pedido = (
+        df_filtered.groupby(
+            [
+                "Pedido",
+                "Denominación",
+                "Nombre 1",
+                "PAIS",
+                "Unidad de negocio",
+                "Tipo de carga",
+                "Nombre Grupo art.",
+            ]
+        )
+        .agg(
+            TM_Pedida=("Cantidad TM", "first"),  # Tomar la primera línea de TM Pedida
+            TM_Recibida=(
+                "Ctd. TM Recibida",
+                "first",
+            ),  # Tomar la primera línea de TM Recibida
+            Valor_Estimado_USD=("Valor Estimado $", "sum"),
+            Valor_Real_USD=("Valor Real $", "sum"),
+            Diferencia_USD=("Diferencia $", "sum"),
+        )
+        .reset_index()
+    )
+
+    detalle_pedido["Ratio USD/TM"] = (
+        detalle_pedido["Valor_Real_USD"] / detalle_pedido["TM_Recibida"]
+    )
+
+    # 7. Cálculos de Indicadores (KPIs)
+    total_oc = detalle_pedido["Pedido"].nunique()
+    total_tm_recibida = detalle_pedido["TM_Recibida"].sum()
+    total_monto_real = detalle_pedido["Valor_Real_USD"].sum()
+    total_monto_est = detalle_pedido["Valor_Estimado_USD"].sum()
     ratio_promedio = (
         total_monto_real / total_tm_recibida if total_tm_recibida > 0 else 0
     )
-    grupos_activos = df_filtered["Nombre Grupo art."].nunique()
+    grupos_activos = detalle_pedido["Nombre Grupo art."].nunique()
 
-    # Mostrar KPIs en 4 columnas
+    # Mostrar KPIs
     c1, c2, c3, c4 = st.columns(4)
     c1.metric(
         "COSTO REAL TOTAL",
@@ -182,18 +212,18 @@ try:
 
     st.markdown("---")
 
-    # 7. Gráfico en escala de Rojos y Grises
+    # 8. Gráfico en escala de Rojos y Grises
     grp_art = (
-        df_filtered.groupby("Nombre Grupo art.")
+        detalle_pedido.groupby("Nombre Grupo art.")
         .agg(
-            TM_Recibida=("Ctd. TM Recibida", "sum"),
-            Valor_Real_USD=("Valor Real $", "sum"),
+            TM_Recibida=("TM_Recibida", "sum"),
+            Valor_Real_USD=("Valor_Real_USD", "sum"),
         )
         .reset_index()
     )
     grp_art["Ratio_USD_TM"] = grp_art["Valor_Real_USD"] / grp_art["TM_Recibida"]
 
-    # Paleta personalizada: De gris acero a rojo MULTI
+    # Paleta de color personalizada (Grises a Rojos)
     custom_red_grey_scale = [
         "#8D99AE",
         "#ADB5BD",
@@ -228,37 +258,12 @@ try:
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # 8. Detalle de Tabla por Pedido (OC) y Denominación
+    # 9. Tabla Detallada
     st.subheader("📋 Detalle de Costos por Pedido (OC) y Denominación")
 
-    detalle_pedido = (
-        df_filtered.groupby(
-            [
-                "Pedido",
-                "Denominación",
-                "Nombre 1",
-                "PAIS",
-                "Unidad de negocio",
-                "Tipo de carga",
-                "Nombre Grupo art.",
-            ]
-        )
-        .agg(
-            TM_Pedida=("Cantidad TM", "sum"),
-            TM_Recibida=("Ctd. TM Recibida", "sum"),
-            Valor_Estimado_USD=("Valor Estimado $", "sum"),
-            Valor_Real_USD=("Valor Real $", "sum"),
-            Diferencia_USD=("Diferencia $", "sum"),
-        )
-        .reset_index()
-    )
-
-    detalle_pedido["Ratio USD/TM"] = (
-        detalle_pedido["Valor_Real_USD"] / detalle_pedido["TM_Recibida"]
-    )
-
-    # Renombrar columnas para la tabla final
-    detalle_pedido.columns = [
+    # Renombrar columnas para la visualización
+    detalle_tabla = detalle_pedido.copy()
+    detalle_tabla.columns = [
         "Pedido (OC)",
         "Denominación",
         "Proveedor",
@@ -275,7 +280,7 @@ try:
     ]
 
     st.dataframe(
-        detalle_pedido.style.format(
+        detalle_tabla.style.format(
             {
                 "TM Pedidas": "{:,.2f}",
                 "TM Recibidas": "{:,.2f}",
