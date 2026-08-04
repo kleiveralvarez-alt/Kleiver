@@ -134,10 +134,11 @@ try:
         "Nombre Grupo art.", options=grupos_opt, default=grupos_opt
     )
 
-    # Filtro País
-    paises_opt = sorted(df["PAIS"].dropna().unique())
-    paises = st.sidebar.multiselect(
-        "País de Origen", options=paises_opt, default=paises_opt
+    # Filtro Sociedad (Sustituye al filtro de País - Columna N)
+    sociedad_col = "Sociedad" if "Sociedad" in df.columns else df.columns[13]
+    sociedades_opt = sorted(df[sociedad_col].dropna().unique())
+    sociedades = st.sidebar.multiselect(
+        "Sociedad", options=sociedades_opt, default=sociedades_opt
     )
 
     # Aplicar filtros al DataFrame
@@ -145,8 +146,11 @@ try:
         (df["Unidad de negocio"].isin(unidades))
         & (df["Tipo de carga"].isin(cargas))
         & (df["Nombre Grupo art."].isin(grupos))
-        & (df["PAIS"].isin(paises))
+        & (df[sociedad_col].isin(sociedades))
     ]
+
+    # Identificar la columna TM MES REAL (Columna AC)
+    tm_col = "TM MES REAL" if "TM MES REAL" in df.columns else df.columns[28]
 
     # 5. Encabezado de la Aplicación
     st.markdown(
@@ -158,25 +162,24 @@ try:
         unsafe_allow_html=True,
     )
 
-    # 6. Agrupación por Pedido (Regla: Primera línea para TM de Pedido)
+    # 6. Agrupación por Pedido (Regla: Primera línea para TM MES REAL de Pedido)
     detalle_pedido = (
         df_filtered.groupby(
             [
                 "Pedido",
                 "Denominación",
                 "Nombre 1",
-                "PAIS",
+                sociedad_col,
                 "Unidad de negocio",
                 "Tipo de carga",
                 "Nombre Grupo art.",
             ]
         )
         .agg(
-            TM_Pedida=("Cantidad TM", "first"),  # Tomar la primera línea de TM Pedida
-            TM_Recibida=(
-                "Ctd. TM Recibida",
+            TM_Real=(
+                tm_col,
                 "first",
-            ),  # Tomar la primera línea de TM Recibida
+            ),  # Tomar la primera línea de TM MES REAL (Columna AC)
             Valor_Estimado_USD=("Valor Estimado $", "sum"),
             Valor_Real_USD=("Valor Real $", "sum"),
             Diferencia_USD=("Diferencia $", "sum"),
@@ -185,16 +188,16 @@ try:
     )
 
     detalle_pedido["Ratio USD/TM"] = (
-        detalle_pedido["Valor_Real_USD"] / detalle_pedido["TM_Recibida"]
+        detalle_pedido["Valor_Real_USD"] / detalle_pedido["TM_Real"]
     )
 
     # 7. Cálculos de Indicadores (KPIs)
     total_oc = detalle_pedido["Pedido"].nunique()
-    total_tm_recibida = detalle_pedido["TM_Recibida"].sum()
+    total_tm_real = detalle_pedido["TM_Real"].sum()
     total_monto_real = detalle_pedido["Valor_Real_USD"].sum()
     total_monto_est = detalle_pedido["Valor_Estimado_USD"].sum()
     ratio_promedio = (
-        total_monto_real / total_tm_recibida if total_tm_recibida > 0 else 0
+        total_monto_real / total_tm_real if total_tm_real > 0 else 0
     )
     grupos_activos = detalle_pedido["Nombre Grupo art."].nunique()
 
@@ -206,7 +209,7 @@ try:
         delta=f"Vs Est. ${total_monto_est:,.0f}",
         delta_color="off",
     )
-    c2.metric("TONELADAS MÉTRICAS", f"{total_tm_recibida:,.1f} TM")
+    c2.metric("TONELADAS MÉTRICAS", f"{total_tm_real:,.1f} TM")
     c3.metric("RATIO PROMEDIO", f"${ratio_promedio:,.2f} /TM")
     c4.metric("GRUPOS ACTIVOS", f"{grupos_activos} / {len(grupos_opt)}")
 
@@ -216,12 +219,12 @@ try:
     grp_art = (
         detalle_pedido.groupby("Nombre Grupo art.")
         .agg(
-            TM_Recibida=("TM_Recibida", "sum"),
+            TM_Real=("TM_Real", "sum"),
             Valor_Real_USD=("Valor_Real_USD", "sum"),
         )
         .reset_index()
     )
-    grp_art["Ratio_USD_TM"] = grp_art["Valor_Real_USD"] / grp_art["TM_Recibida"]
+    grp_art["Ratio_USD_TM"] = grp_art["Valor_Real_USD"] / grp_art["TM_Real"]
 
     # Paleta de color personalizada (Grises a Rojos)
     custom_red_grey_scale = [
@@ -238,7 +241,7 @@ try:
         y="Ratio_USD_TM",
         title="Costos por Tonelada Métrica (USD / TM) según Grupo de Artículo",
         labels={
-            "Ratio_USD_TM": "USD / TM Recibida",
+            "Ratio_USD_TM": "USD / TM Real",
             "Nombre Grupo art.": "Grupo de Artículo",
         },
         text_auto=".2f",
@@ -267,12 +270,11 @@ try:
         "Pedido (OC)",
         "Denominación",
         "Proveedor",
-        "País",
+        "Sociedad",
         "Unidad Negocio",
         "Tipo Carga",
         "Grupo Artículo",
-        "TM Pedidas",
-        "TM Recibidas",
+        "TM Mes Real",
         "Valor Est. ($)",
         "Valor Real ($)",
         "Diferencia ($)",
@@ -282,8 +284,7 @@ try:
     st.dataframe(
         detalle_tabla.style.format(
             {
-                "TM Pedidas": "{:,.2f}",
-                "TM Recibidas": "{:,.2f}",
+                "TM Mes Real": "{:,.2f}",
                 "Valor Est. ($)": "${:,.2f}",
                 "Valor Real ($)": "${:,.2f}",
                 "Diferencia ($)": "${:,.2f}",
