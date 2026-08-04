@@ -84,32 +84,27 @@ def load_data():
 try:
     df = load_data()
 
-    # Normalizar nombres de columnas (quitar espacios adicionales)
-    df.columns = df.columns.astype(str).str.strip()
-
-    # Buscar columna de Sociedad
+    # Identificación precisa de columnas por nombre o posición exacta
+    # Columna N (índice 13 en base cero) para Sociedad
     sociedad_col = None
     for col in df.columns:
-        if "sociedad" in col.lower():
+        if "sociedad" in str(col).strip().lower():
             sociedad_col = col
             break
-    if not sociedad_col:
-        sociedad_col = df.columns[min(13, len(df.columns) - 1)]
+    if not sociedad_col and len(df.columns) > 13:
+        sociedad_col = df.columns[13]
 
-    # Buscar columna de TM MES REAL
+    # Columna AC (índice 28 en base cero) para TM MES REAL
     tm_col = None
     for col in df.columns:
-        if "tm mes real" in col.lower() or "tm_real" in col.lower():
+        if "tm mes real" in str(col).strip().lower():
             tm_col = col
             break
-    if not tm_col:
-        # Si no encuentra 'TM MES REAL', busca cualquiera con 'TM'
-        for col in df.columns:
-            if "tm" in col.lower():
-                tm_col = col
-                break
-    if not tm_col:
-        tm_col = df.columns[min(28, len(df.columns) - 1)]
+    if not tm_col and len(df.columns) > 28:
+        tm_col = df.columns[28]
+
+    # Limpieza de nulos en Sociedad para el filtro
+    df[sociedad_col] = df[sociedad_col].fillna("Sin Sociedad").astype(str)
 
     # 4. Sidebar - Encabezado con Logo y Filtros
     if os.path.exists("logo1.png"):
@@ -129,7 +124,7 @@ try:
 
     st.sidebar.subheader("🔍 Filtros de Búsqueda")
 
-    # Filtros dinámicos seguros
+    # Filtros dinámicos
     unidades_opt = sorted(df["Unidad de negocio"].dropna().unique())
     unidades = st.sidebar.multiselect(
         "Unidad de Negocio", options=unidades_opt, default=unidades_opt
@@ -145,12 +140,12 @@ try:
         "Nombre Grupo art.", options=grupos_opt, default=grupos_opt
     )
 
-    sociedades_opt = sorted(df[sociedad_col].dropna().unique())
+    sociedades_opt = sorted(df[sociedad_col].unique())
     sociedades = st.sidebar.multiselect(
         "Sociedad", options=sociedades_opt, default=sociedades_opt
     )
 
-    # Aplicar filtros
+    # Aplicar filtros AL INICIO del flujo
     df_filtered = df[
         (df["Unidad de negocio"].isin(unidades))
         & (df["Tipo de carga"].isin(cargas))
@@ -168,21 +163,20 @@ try:
         unsafe_allow_html=True,
     )
 
-    # 6. Agrupación por Pedido (Toma la 1ra línea de TM por pedido)
+    # 6. Agrupación por Pedido respetando la primera línea de TM MES REAL
     detalle_pedido = (
-        df_filtered.groupby(
-            [
-                "Pedido",
-                "Denominación",
-                "Nombre 1",
-                sociedad_col,
-                "Unidad de negocio",
-                "Tipo de carga",
-                "Nombre Grupo art.",
-            ]
-        )
+        df_filtered.groupby("Pedido")
         .agg(
-            TM_Real=(tm_col, "first"),
+            Denominación=("Denominación", "first"),
+            Proveedor=("Nombre 1", "first"),
+            Sociedad=(sociedad_col, "first"),
+            Unidad_Negocio=("Unidad de negocio", "first"),
+            Tipo_Carga=("Tipo de carga", "first"),
+            Grupo_Articulo=("Nombre Grupo art.", "first"),
+            TM_Real=(
+                tm_col,
+                "first",
+            ),  # Primera línea por pedido para TM MES REAL
             Valor_Estimado_USD=("Valor Estimado $", "sum"),
             Valor_Real_USD=("Valor Real $", "sum"),
             Diferencia_USD=("Diferencia $", "sum"),
@@ -190,9 +184,13 @@ try:
         .reset_index()
     )
 
+    # Asegurar que TM_Real sea numérico
+    detalle_pedido["TM_Real"] = pd.to_numeric(
+        detalle_pedido["TM_Real"], errors="coerce"
+    ).fillna(0)
     detalle_pedido["Ratio USD/TM"] = (
         detalle_pedido["Valor_Real_USD"] / detalle_pedido["TM_Real"]
-    )
+    ).fillna(0)
 
     # 7. Indicadores (KPIs)
     total_oc = detalle_pedido["Pedido"].nunique()
@@ -202,7 +200,7 @@ try:
     ratio_promedio = (
         total_monto_real / total_tm_real if total_tm_real > 0 else 0
     )
-    grupos_activos = detalle_pedido["Nombre Grupo art."].nunique()
+    grupos_activos = detalle_pedido["Grupo_Articulo"].nunique()
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric(
@@ -217,16 +215,18 @@ try:
 
     st.markdown("---")
 
-    # 8. Gráfico de Barras
+    # 8. Gráfico de Barras por Grupo de Artículo
     grp_art = (
-        detalle_pedido.groupby("Nombre Grupo art.")
+        detalle_pedido.groupby("Grupo_Articulo")
         .agg(
             TM_Real=("TM_Real", "sum"),
             Valor_Real_USD=("Valor_Real_USD", "sum"),
         )
         .reset_index()
     )
-    grp_art["Ratio_USD_TM"] = grp_art["Valor_Real_USD"] / grp_art["TM_Real"]
+    grp_art["Ratio_USD_TM"] = (
+        grp_art["Valor_Real_USD"] / grp_art["TM_Real"]
+    ).fillna(0)
 
     custom_red_grey_scale = [
         "#8D99AE",
@@ -238,12 +238,12 @@ try:
 
     fig = px.bar(
         grp_art.sort_values("Ratio_USD_TM", ascending=False),
-        x="Nombre Grupo art.",
+        x="Grupo_Articulo",
         y="Ratio_USD_TM",
         title="Costos por Tonelada Métrica (USD / TM) según Grupo de Artículo",
         labels={
             "Ratio_USD_TM": "USD / TM Real",
-            "Nombre Grupo art.": "Grupo de Artículo",
+            "Grupo_Articulo": "Grupo de Artículo",
         },
         text_auto=".2f",
         color="Ratio_USD_TM",
