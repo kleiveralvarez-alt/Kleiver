@@ -11,7 +11,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# 2. Estilos personalizados (CSS) - Ocultar Sidebar y Maximizar Área
+# 2. Estilos personalizados (CSS) - Ajuste de márgenes superiores
 st.markdown(
     """
     <style>
@@ -20,9 +20,9 @@ st.markdown(
             display: none !important;
         }
 
-        /* Reducir márgenes superiores para aprovechar la pantalla al máximo */
+        /* Margen superior adecuado para que el logo no se corte */
         .block-container {
-            padding-top: 1.5rem !important;
+            padding-top: 3rem !important;
             padding-bottom: 2rem !important;
             padding-left: 2rem !important;
             padding-right: 2rem !important;
@@ -205,18 +205,18 @@ try:
     for c in [tm_col, val_est_col, val_real_col, dif_col]:
         df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
 
-    # 4. ENCABEZADO FIJO CON LOGO Y TÍTULO (SIN SIDEBAR)
-    col_logo, col_titulo = st.columns([1, 4])
+    # 4. ENCABEZADO CON LOGO COMPLETO Y ALINEADO
+    col_logo, col_titulo = st.columns([1, 4], vertical_alignment="center")
 
     with col_logo:
         if os.path.exists("logo1.png"):
-            st.image("logo1.png", width=220)
+            st.image("logo1.png", use_container_width=True)
         elif os.path.exists("logo.png"):
-            st.image("logo.png", width=220)
+            st.image("logo.png", use_container_width=True)
         else:
             st.markdown(
                 """
-                <div style="background-color: #E30613; padding: 10px; border-radius: 8px; text-align: center;">
+                <div style="background-color: #E30613; padding: 12px; border-radius: 8px; text-align: center;">
                     <h2 style="color: white !important; margin: 0; font-weight: 900; font-size: 22px;">↗ MULTI</h2>
                     <span style="color: white !important; font-size: 9px; font-weight: 700; letter-spacing: 2px;">LÍDER EN ACERO</span>
                 </div>
