@@ -3,24 +3,30 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-# 1. Configuración de la página
+# 1. Configuración de la página en modo WIDE
 st.set_page_config(
     page_title="Panel de Costos de Internación | MULTI",
     page_icon="🔴",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
-# 2. Estilos personalizados (CSS) - Colores e Identidad MULTI
+# 2. Estilos personalizados (CSS) - Ocultar Sidebar y Maximizar Área
 st.markdown(
     """
     <style>
-        /* Fondo del Sidebar */
-        [data-testid="stSidebar"] {
-            background-color: #E9ECEF !important;
+        /* Ocultar completamente el Sidebar y el botón del menú desplegable */
+        [data-testid="stSidebar"], [data-testid="collapsedControl"] {
+            display: none !important;
         }
-        [data-testid="stSidebar"] * {
-            color: #212529 !important;
+
+        /* Reducir márgenes superiores para aprovechar la pantalla al máximo */
+        .block-container {
+            padding-top: 1.5rem !important;
+            padding-bottom: 2rem !important;
+            padding-left: 2rem !important;
+            padding-right: 2rem !important;
+            max-width: 100% !important;
         }
 
         /* Tarjetas de Indicadores (KPIs) */
@@ -53,6 +59,7 @@ st.markdown(
             font-size: 2.2rem;
             font-weight: 800;
             margin-bottom: 0px;
+            line-height: 1.1;
         }
         .sub-title {
             color: #E30613;
@@ -60,7 +67,7 @@ st.markdown(
             font-weight: 700;
             letter-spacing: 1.5px;
             text-transform: uppercase;
-            margin-bottom: 20px;
+            margin-bottom: 0px;
         }
 
         /* Separador */
@@ -198,38 +205,38 @@ try:
     for c in [tm_col, val_est_col, val_real_col, dif_col]:
         df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
 
-    # 4. Sidebar (Marca y Logo)
-    if os.path.exists("logo1.png"):
-        st.sidebar.image("logo1.png", use_container_width=True)
-    elif os.path.exists("logo.png"):
-        st.sidebar.image("logo.png", use_container_width=True)
-    else:
-        st.sidebar.markdown(
-            """
-            <div style="background-color: #E30613; padding: 12px; border-radius: 8px; text-align: center; margin-bottom: 15px;">
-                <h2 style="color: white !important; margin: 0; font-weight: 900; font-size: 24px;">↗ MULTI</h2>
-                <span style="color: white !important; font-size: 10px; font-weight: 700; letter-spacing: 2px;">LÍDER EN ACERO</span>
-            </div>
-        """,
+    # 4. ENCABEZADO FIJO CON LOGO Y TÍTULO (SIN SIDEBAR)
+    col_logo, col_titulo = st.columns([1, 4])
+
+    with col_logo:
+        if os.path.exists("logo1.png"):
+            st.image("logo1.png", width=220)
+        elif os.path.exists("logo.png"):
+            st.image("logo.png", width=220)
+        else:
+            st.markdown(
+                """
+                <div style="background-color: #E30613; padding: 10px; border-radius: 8px; text-align: center;">
+                    <h2 style="color: white !important; margin: 0; font-weight: 900; font-size: 22px;">↗ MULTI</h2>
+                    <span style="color: white !important; font-size: 9px; font-weight: 700; letter-spacing: 2px;">LÍDER EN ACERO</span>
+                </div>
+            """,
+                unsafe_allow_html=True,
+            )
+
+    with col_titulo:
+        st.markdown(
+            '<p class="main-title">Panel de Costos de Internación</p>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            '<p class="sub-title">Análisis Operativo y Nacionalización de Acero</p>',
             unsafe_allow_html=True,
         )
 
-    st.sidebar.markdown("---")
-    st.sidebar.info(
-        "💡 **Filtros Dinámicos en Cascada**\n\nAl seleccionar una **Sociedad**, las opciones de **Unidad de Negocio**, **Tipo de Carga** y **Tipo de Material** se actualizarán en cadena según la disponibilidad real."
-    )
+    st.markdown("<hr>", unsafe_allow_html=True)
 
-    # 5. Encabezado de la Aplicación
-    st.markdown(
-        '<p class="main-title">Panel de Costos de Internación</p>',
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        '<p class="sub-title">Análisis Operativo y Nacionalización de Acero</p>',
-        unsafe_allow_html=True,
-    )
-
-    # 6. FILTROS EN CASCADA (DEPENDIENTES)
+    # 5. FILTROS EN CASCADA (DEPENDIENTES)
     with st.expander("🔍 **FILTROS DE BÚSQUEDA (CASCADA)**", expanded=True):
         col_f1, col_f2, col_f3, col_f4 = st.columns(4)
 
@@ -245,7 +252,7 @@ try:
         # Filtrado para Nivel 2
         df_lvl1 = df[df[sociedad_col].isin(sociedades)]
 
-        # Nivel 2: Unidad de Negocio (Depende de Sociedad)
+        # Nivel 2: Unidad de Negocio
         with col_f2:
             unidades_opt = sorted(
                 [x for x in df_lvl1[unid_col].unique() if str(x) != "nan"]
@@ -259,7 +266,7 @@ try:
         # Filtrado para Nivel 3
         df_lvl2 = df_lvl1[df_lvl1[unid_col].isin(unidades)]
 
-        # Nivel 3: Tipo de Carga (Depende de Nivel 1 y 2)
+        # Nivel 3: Tipo de Carga
         with col_f3:
             cargas_opt = sorted(
                 [x for x in df_lvl2[carga_col].unique() if str(x) != "nan"]
@@ -271,7 +278,7 @@ try:
         # Filtrado para Nivel 4
         df_lvl3 = df_lvl2[df_lvl2[carga_col].isin(cargas)]
 
-        # Nivel 4: Tipo de Material (Depende de Niveles 1, 2 y 3)
+        # Nivel 4: Tipo de Material
         with col_f4:
             materiales_opt = sorted(
                 [x for x in df_lvl3[material_col].unique() if str(x) != "nan"]
@@ -290,7 +297,7 @@ try:
             "No hay registros disponibles para la combinación de filtros seleccionada."
         )
     else:
-        # 7. Agrupación por Pedido
+        # 6. Agrupación por Pedido
         detalle_pedido = df_filtered.groupby(
             pedido_col, as_index=False
         ).agg(
@@ -310,12 +317,12 @@ try:
             detalle_pedido["TM_Real"], errors="coerce"
         ).fillna(0)
 
-        # Cálculo de Ratio USD / TM exacto usando USD REAL
+        # Ratio USD / TM exacto usando USD REAL
         detalle_pedido["Ratio_USD_TM"] = (
             detalle_pedido["USD_Real"] / detalle_pedido["TM_Real"]
         ).fillna(0)
 
-        # 8. Indicadores (KPIs)
+        # 7. Indicadores (KPIs)
         total_oc = detalle_pedido[pedido_col].nunique()
         total_tm_real = detalle_pedido["TM_Real"].sum()
         total_usd_real = detalle_pedido["USD_Real"].sum()
@@ -342,7 +349,7 @@ try:
 
         st.markdown("---")
 
-        # 9. Gráfico por Tipo de Material basado en USD REAL / TM REAL
+        # 8. Gráfico por Tipo de Material basado en USD REAL / TM REAL
         grp_mat = detalle_pedido.groupby("Tipo_Material", as_index=False).agg(
             TM_Real=("TM_Real", "sum"), USD_Real=("USD_Real", "sum")
         )
@@ -384,7 +391,7 @@ try:
 
         st.plotly_chart(fig, use_container_width=True)
 
-        # 10. Tabla Detallada
+        # 9. Tabla Detallada a Pantalla Completa
         st.subheader("📋 Detalle de Costos por Pedido (OC) y Denominación")
 
         detalle_tabla = detalle_pedido.copy()
