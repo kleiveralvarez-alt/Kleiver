@@ -15,17 +15,12 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-        /* Fondo del Sidebar en Gris Claro */
         [data-testid="stSidebar"] {
             background-color: #E9ECEF !important;
         }
-        
-        /* Ajuste de colores en el Sidebar */
         [data-testid="stSidebar"] * {
             color: #212529 !important;
         }
-
-        /* Tarjetas de Indicadores (KPIs) */
         [data-testid="stMetric"] {
             background-color: #FFFFFF;
             border: 1px solid #DEE2E6;
@@ -33,32 +28,25 @@ st.markdown(
             border-radius: 12px;
             box-shadow: 0px 3px 8px rgba(0,0,0,0.05);
         }
-
         [data-testid="stMetricLabel"] {
             color: #6C757D !important;
             font-weight: 700;
             font-size: 0.85rem;
             letter-spacing: 0.5px;
         }
-
         [data-testid="stMetricValue"] {
             color: #1A1A1A !important;
             font-weight: 800;
         }
-
-        /* Tags/Pills de filtros seleccionados */
         span[data-baseweb="tag"] {
             background-color: #E30613 !important;
         }
-        
-        /* Encabezados e Historia de Marca */
         .main-title {
             color: #1A1A1A;
             font-size: 2.2rem;
             font-weight: 800;
             margin-bottom: 0px;
         }
-        
         .sub-title {
             color: #E30613;
             font-size: 0.95rem;
@@ -67,8 +55,6 @@ st.markdown(
             text-transform: uppercase;
             margin-bottom: 20px;
         }
-
-        /* Línea divisora roja */
         hr {
             border-top: 2px solid #E30613 !important;
             margin-top: 15px;
@@ -98,6 +84,33 @@ def load_data():
 try:
     df = load_data()
 
+    # Normalizar nombres de columnas (quitar espacios adicionales)
+    df.columns = df.columns.astype(str).str.strip()
+
+    # Buscar columna de Sociedad
+    sociedad_col = None
+    for col in df.columns:
+        if "sociedad" in col.lower():
+            sociedad_col = col
+            break
+    if not sociedad_col:
+        sociedad_col = df.columns[min(13, len(df.columns) - 1)]
+
+    # Buscar columna de TM MES REAL
+    tm_col = None
+    for col in df.columns:
+        if "tm mes real" in col.lower() or "tm_real" in col.lower():
+            tm_col = col
+            break
+    if not tm_col:
+        # Si no encuentra 'TM MES REAL', busca cualquiera con 'TM'
+        for col in df.columns:
+            if "tm" in col.lower():
+                tm_col = col
+                break
+    if not tm_col:
+        tm_col = df.columns[min(28, len(df.columns) - 1)]
+
     # 4. Sidebar - Encabezado con Logo y Filtros
     if os.path.exists("logo1.png"):
         st.sidebar.image("logo1.png", use_container_width=True)
@@ -116,41 +129,34 @@ try:
 
     st.sidebar.subheader("🔍 Filtros de Búsqueda")
 
-    # Filtro Unidad de Negocio
+    # Filtros dinámicos seguros
     unidades_opt = sorted(df["Unidad de negocio"].dropna().unique())
     unidades = st.sidebar.multiselect(
         "Unidad de Negocio", options=unidades_opt, default=unidades_opt
     )
 
-    # Filtro Tipo de Carga
     cargas_opt = sorted(df["Tipo de carga"].dropna().unique())
     cargas = st.sidebar.multiselect(
         "Tipo de Carga", options=cargas_opt, default=cargas_opt
     )
 
-    # Filtro Nombre Grupo art.
     grupos_opt = sorted(df["Nombre Grupo art."].dropna().unique())
     grupos = st.sidebar.multiselect(
         "Nombre Grupo art.", options=grupos_opt, default=grupos_opt
     )
 
-    # Filtro Sociedad (Sustituye al filtro de País - Columna N)
-    sociedad_col = "Sociedad" if "Sociedad" in df.columns else df.columns[13]
     sociedades_opt = sorted(df[sociedad_col].dropna().unique())
     sociedades = st.sidebar.multiselect(
         "Sociedad", options=sociedades_opt, default=sociedades_opt
     )
 
-    # Aplicar filtros al DataFrame
+    # Aplicar filtros
     df_filtered = df[
         (df["Unidad de negocio"].isin(unidades))
         & (df["Tipo de carga"].isin(cargas))
         & (df["Nombre Grupo art."].isin(grupos))
         & (df[sociedad_col].isin(sociedades))
     ]
-
-    # Identificar la columna TM MES REAL (Columna AC)
-    tm_col = "TM MES REAL" if "TM MES REAL" in df.columns else df.columns[28]
 
     # 5. Encabezado de la Aplicación
     st.markdown(
@@ -162,7 +168,7 @@ try:
         unsafe_allow_html=True,
     )
 
-    # 6. Agrupación por Pedido (Regla: Primera línea para TM MES REAL de Pedido)
+    # 6. Agrupación por Pedido (Toma la 1ra línea de TM por pedido)
     detalle_pedido = (
         df_filtered.groupby(
             [
@@ -176,10 +182,7 @@ try:
             ]
         )
         .agg(
-            TM_Real=(
-                tm_col,
-                "first",
-            ),  # Tomar la primera línea de TM MES REAL (Columna AC)
+            TM_Real=(tm_col, "first"),
             Valor_Estimado_USD=("Valor Estimado $", "sum"),
             Valor_Real_USD=("Valor Real $", "sum"),
             Diferencia_USD=("Diferencia $", "sum"),
@@ -191,7 +194,7 @@ try:
         detalle_pedido["Valor_Real_USD"] / detalle_pedido["TM_Real"]
     )
 
-    # 7. Cálculos de Indicadores (KPIs)
+    # 7. Indicadores (KPIs)
     total_oc = detalle_pedido["Pedido"].nunique()
     total_tm_real = detalle_pedido["TM_Real"].sum()
     total_monto_real = detalle_pedido["Valor_Real_USD"].sum()
@@ -201,7 +204,6 @@ try:
     )
     grupos_activos = detalle_pedido["Nombre Grupo art."].nunique()
 
-    # Mostrar KPIs
     c1, c2, c3, c4 = st.columns(4)
     c1.metric(
         "COSTO REAL TOTAL",
@@ -215,7 +217,7 @@ try:
 
     st.markdown("---")
 
-    # 8. Gráfico en escala de Rojos y Grises
+    # 8. Gráfico de Barras
     grp_art = (
         detalle_pedido.groupby("Nombre Grupo art.")
         .agg(
@@ -226,7 +228,6 @@ try:
     )
     grp_art["Ratio_USD_TM"] = grp_art["Valor_Real_USD"] / grp_art["TM_Real"]
 
-    # Paleta de color personalizada (Grises a Rojos)
     custom_red_grey_scale = [
         "#8D99AE",
         "#ADB5BD",
@@ -264,7 +265,6 @@ try:
     # 9. Tabla Detallada
     st.subheader("📋 Detalle de Costos por Pedido (OC) y Denominación")
 
-    # Renombrar columnas para la visualización
     detalle_tabla = detalle_pedido.copy()
     detalle_tabla.columns = [
         "Pedido (OC)",
