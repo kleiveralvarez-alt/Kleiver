@@ -99,15 +99,20 @@ try:
     df = load_data()
 
     # 4. Sidebar - Encabezado y Filtros
-    st.sidebar.markdown(
-        """
-        <div style="text-align: center; padding: 10px 0 20px 0;">
-            <h2 style="color: #E30613 !important; font-weight: 900; margin: 0; font-size: 28px;">MULTI</h2>
-            <span style="color: #495057 !important; font-size: 11px; font-weight: 700; letter-spacing: 2px;">LÍDER EN ACERO</span>
-        </div>
-    """,
-        unsafe_allow_html=True,
-    )
+    if os.path.exists("logo1.png"):
+        st.sidebar.image("logo1.png", use_container_width=True)
+    else:
+        st.sidebar.markdown(
+            """
+            <div style="background-color: #E30613; padding: 12px; border-radius: 8px; text-align: center; margin-bottom: 15px;">
+                <h2 style="color: white !important; margin: 0; font-weight: 900; font-size: 24px;">↗ MULTI</h2>
+                <span style="color: white !important; font-size: 10px; font-weight: 700; letter-spacing: 2px;">LÍDER EN ACERO</span>
+            </div>
+        """,
+            unsafe_allow_html=True,
+        )
+
+    st.sidebar.subheader("🔍 Filtros de Búsqueda")
 
     st.sidebar.subheader("🔍 Filtros de Búsqueda")
 
