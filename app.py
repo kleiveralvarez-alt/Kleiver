@@ -11,13 +11,16 @@ st.set_page_config(
 
 st.title("📊 Panel de Costos de Internación")
 st.markdown(
-    "Desglose de costos reales de nacionalización por tipo de carga, unidad de negocio y grupo de artículo, expresados en costo por tonelada métrica (TM)."
+    "Desglose de costos reales de nacionalización por tipo de carga, unidad de negocio, país y grupo de artículo, expresados en costo por tonelada métrica (TM)."
 )
 
 
 @st.cache_data
 def load_data():
-    file_name = "1 julio internacion.XLSX"
+    file_name = "1 julio internacion_2.XLSX"
+    if not os.path.exists(file_name):
+        file_name = "1 julio internacion.XLSX"
+
     if not os.path.exists(file_name):
         for f in os.listdir("."):
             if "julio" in f.lower() and f.endswith((".xlsx", ".XLSX")):
@@ -32,19 +35,28 @@ try:
     # Sidebar - Filtros
     st.sidebar.header("🔍 Filtros de Búsqueda")
 
+    # Filtro Unidad de Negocio
     unidades_opt = sorted(df["Unidad de negocio"].dropna().unique())
     unidades = st.sidebar.multiselect(
         "Unidad de Negocio", options=unidades_opt, default=unidades_opt
     )
 
+    # Filtro Tipo de Carga
     cargas_opt = sorted(df["Tipo de carga"].dropna().unique())
     cargas = st.sidebar.multiselect(
         "Tipo de Carga", options=cargas_opt, default=cargas_opt
     )
 
+    # Filtro Nombre Grupo art.
     grupos_opt = sorted(df["Nombre Grupo art."].dropna().unique())
     grupos = st.sidebar.multiselect(
         "Nombre Grupo art.", options=grupos_opt, default=grupos_opt
+    )
+
+    # Filtro País
+    paises_opt = sorted(df["PAIS"].dropna().unique())
+    paises = st.sidebar.multiselect(
+        "País de Origen", options=paises_opt, default=paises_opt
     )
 
     # Filtrado dinámico
@@ -52,6 +64,7 @@ try:
         (df["Unidad de negocio"].isin(unidades))
         & (df["Tipo de carga"].isin(cargas))
         & (df["Nombre Grupo art."].isin(grupos))
+        & (df["PAIS"].isin(paises))
     ]
 
     # Cálculos globales
@@ -103,14 +116,16 @@ try:
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # Detalle por Pedido (Lista desplegada)
-    st.subheader("📋 Detalle de Costos por Pedido (OC)")
+    # Detalle por Pedido y Denominación
+    st.subheader("📋 Detalle de Costos por Pedido (OC) y Denominación")
 
     detalle_pedido = (
         df_filtered.groupby(
             [
                 "Pedido",
+                "Denominación",
                 "Nombre 1",
+                "PAIS",
                 "Unidad de negocio",
                 "Tipo de carga",
                 "Nombre Grupo art.",
@@ -129,14 +144,13 @@ try:
     detalle_pedido["Ratio USD/TM"] = (
         detalle_pedido["Valor_Real_USD"] / detalle_pedido["TM_Recibida"]
     )
-    detalle_pedido["Cumplimiento %"] = (
-        detalle_pedido["TM_Recibida"] / detalle_pedido["TM_Pedida"]
-    ) * 100
 
     # Renombrar columnas para la tabla final
     detalle_pedido.columns = [
         "Pedido (OC)",
+        "Denominación",
         "Proveedor",
+        "País",
         "Unidad Negocio",
         "Tipo Carga",
         "Grupo Artículo",
@@ -146,7 +160,6 @@ try:
         "Valor Real ($)",
         "Diferencia ($)",
         "Ratio ($/TM)",
-        "Cumplimiento (%)",
     ]
 
     st.dataframe(
@@ -158,7 +171,6 @@ try:
                 "Valor Real ($)": "${:,.2f}",
                 "Diferencia ($)": "${:,.2f}",
                 "Ratio ($/TM)": "${:,.2f}",
-                "Cumplimiento (%)": "{:.1f}%",
             }
         ),
         use_container_width=True,
