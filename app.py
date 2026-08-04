@@ -143,7 +143,7 @@ try:
         ),
     )
 
-    # Búsqueda explícita de USD REAL y USD ESTIMADO
+    # USD REAL y USD ESTIMADO
     val_real_col = next(
         (
             c
@@ -165,7 +165,7 @@ try:
         df.columns[min(8, len(df.columns) - 1)],
     )
 
-    # Otras columnas secundarias
+    # Otras columnas
     unid_col = next(
         (c for c in df.columns if "unidad de negocio" in c.lower()),
         df.columns[min(1, len(df.columns) - 1)],
@@ -194,7 +194,7 @@ try:
     ]:
         df[c] = df[c].fillna("Sin Información").astype(str).str.strip()
 
-    # Conversión numérica exacta
+    # Conversión numérica
     for c in [tm_col, val_est_col, val_real_col, dif_col]:
         df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
 
@@ -216,7 +216,7 @@ try:
 
     st.sidebar.markdown("---")
     st.sidebar.info(
-        "💡 **Panel Control de Costos**\n\nFiltra en la parte superior por Sociedad, Unidad de Negocio, Tipo de Carga y Tipo de Material."
+        "💡 **Filtros Dinámicos en Cascada**\n\nAl seleccionar una **Sociedad**, las opciones de **Unidad de Negocio**, **Tipo de Carga** y **Tipo de Material** se actualizarán en cadena según la disponibilidad real."
     )
 
     # 5. Encabezado de la Aplicación
@@ -229,60 +229,68 @@ try:
         unsafe_allow_html=True,
     )
 
-    # 6. FILTROS EN LA PARTE SUPERIOR
-    with st.expander("🔍 **FILTROS DE BÚSQUEDA**", expanded=True):
+    # 6. FILTROS EN CASCADA (DEPENDIENTES)
+    with st.expander("🔍 **FILTROS DE BÚSQUEDA (CASCADA)**", expanded=True):
         col_f1, col_f2, col_f3, col_f4 = st.columns(4)
 
+        # Nivel 1: Sociedad
         with col_f1:
             sociedades_opt = sorted(
                 [x for x in df[sociedad_col].unique() if str(x) != "nan"]
             )
             sociedades = st.multiselect(
-                "Sociedad", options=sociedades_opt, default=sociedades_opt
+                "1. Sociedad", options=sociedades_opt, default=sociedades_opt
             )
 
+        # Filtrado para Nivel 2
+        df_lvl1 = df[df[sociedad_col].isin(sociedades)]
+
+        # Nivel 2: Unidad de Negocio (Depende de Sociedad)
         with col_f2:
             unidades_opt = sorted(
-                [x for x in df[unid_col].unique() if str(x) != "nan"]
+                [x for x in df_lvl1[unid_col].unique() if str(x) != "nan"]
             )
             unidades = st.multiselect(
-                "Unidad de Negocio",
+                "2. Unidad de Negocio",
                 options=unidades_opt,
                 default=unidades_opt,
             )
 
+        # Filtrado para Nivel 3
+        df_lvl2 = df_lvl1[df_lvl1[unid_col].isin(unidades)]
+
+        # Nivel 3: Tipo de Carga (Depende de Nivel 1 y 2)
         with col_f3:
             cargas_opt = sorted(
-                [x for x in df[carga_col].unique() if str(x) != "nan"]
+                [x for x in df_lvl2[carga_col].unique() if str(x) != "nan"]
             )
             cargas = st.multiselect(
-                "Tipo de Carga", options=cargas_opt, default=cargas_opt
+                "3. Tipo de Carga", options=cargas_opt, default=cargas_opt
             )
 
+        # Filtrado para Nivel 4
+        df_lvl3 = df_lvl2[df_lvl2[carga_col].isin(cargas)]
+
+        # Nivel 4: Tipo de Material (Depende de Niveles 1, 2 y 3)
         with col_f4:
             materiales_opt = sorted(
-                [x for x in df[material_col].unique() if str(x) != "nan"]
+                [x for x in df_lvl3[material_col].unique() if str(x) != "nan"]
             )
             materiales = st.multiselect(
-                "Tipo de Material",
+                "4. Tipo de Material",
                 options=materiales_opt,
                 default=materiales_opt,
             )
 
-    # Aplicar filtros a la base de datos
-    df_filtered = df[
-        (df[sociedad_col].isin(sociedades))
-        & (df[unid_col].isin(unidades))
-        & (df[carga_col].isin(cargas))
-        & (df[material_col].isin(materiales))
-    ].copy()
+    # Filtro final aplicado
+    df_filtered = df_lvl3[df_lvl3[material_col].isin(materiales)].copy()
 
     if df_filtered.empty:
         st.warning(
-            "No hay registros disponibles para los filtros seleccionados."
+            "No hay registros disponibles para la combinación de filtros seleccionada."
         )
     else:
-        # 7. Agrupación por Pedido (Primera línea de TM MES REAL por Pedido, suma de USD REAL y ESTIMADO)
+        # 7. Agrupación por Pedido
         detalle_pedido = df_filtered.groupby(
             pedido_col, as_index=False
         ).agg(
@@ -395,7 +403,7 @@ try:
             "Ratio ($/TM)",
         ]
 
-        # Formato numérico explícito en la tabla
+        # Formato numérico en la tabla
         for col in ["USD Estimado", "USD Real", "Diferencia ($)", "Ratio ($/TM)"]:
             detalle_tabla[col] = detalle_tabla[col].map("${:,.2f}".format)
 
