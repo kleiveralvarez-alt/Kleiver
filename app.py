@@ -4,15 +4,17 @@ import plotly.express as px
 import streamlit as st
 
 st.set_page_config(
-    page_title="Dashboard OC - Ratio por TM",
+    page_title="Panel de Costos de Internación",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-st.title("📊 Dashboard Interactivo de Ratios por TM")
+st.title("📊 Panel de Costos de Internación")
+st.markdown(
+    "Desglose de costos reales de nacionalización por tipo de carga, unidad de negocio y grupo de artículo, expresados en costo por tonelada métrica (TM)."
+)
 
 
-# Carga de datos flexible
 @st.cache_data
 def load_data():
     file_name = "1 julio internacion.XLSX"
@@ -27,72 +29,140 @@ def load_data():
 try:
     df = load_data()
 
-    # Sidebar Filtros
-    st.sidebar.header("Filtros de Búsqueda")
+    # Sidebar - Filtros
+    st.sidebar.header("🔍 Filtros de Búsqueda")
+
+    unidades_opt = sorted(df["Unidad de negocio"].dropna().unique())
     unidades = st.sidebar.multiselect(
-        "Unidad de Negocio",
-        options=sorted(df["Unidad de negocio"].dropna().unique()),
-        default=list(df["Unidad de negocio"].dropna().unique()),
+        "Unidad de Negocio", options=unidades_opt, default=unidades_opt
     )
 
+    cargas_opt = sorted(df["Tipo de carga"].dropna().unique())
     cargas = st.sidebar.multiselect(
-        "Tipo de Carga",
-        options=sorted(df["Tipo de carga"].dropna().unique()),
-        default=list(df["Tipo de carga"].dropna().unique()),
+        "Tipo de Carga", options=cargas_opt, default=cargas_opt
     )
 
-    # Filtrado
+    grupos_opt = sorted(df["Nombre Grupo art."].dropna().unique())
+    grupos = st.sidebar.multiselect(
+        "Nombre Grupo art.", options=grupos_opt, default=grupos_opt
+    )
+
+    # Filtrado dinámico
     df_filtered = df[
         (df["Unidad de negocio"].isin(unidades))
         & (df["Tipo de carga"].isin(cargas))
+        & (df["Nombre Grupo art."].isin(grupos))
     ]
 
-    # Agrupación
-    grp = (
-        df_filtered.groupby(
-            ["Unidad de negocio", "Tipo de carga", "Nombre Grupo art."]
-        )
+    # Cálculos globales
+    total_oc = df_filtered["Pedido"].nunique()
+    total_tm_recibida = df_filtered["Ctd. TM Recibida"].sum()
+    total_monto_real = df_filtered["Valor Real $"].sum()
+    total_monto_est = df_filtered["Valor Estimado $"].sum()
+    ratio_promedio = (
+        total_monto_real / total_tm_recibida if total_tm_recibida > 0 else 0
+    )
+    grupos_activos = df_filtered["Nombre Grupo art."].nunique()
+
+    # Indicadores (KPIs)
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric(
+        "COSTO REAL TOTAL",
+        f"${total_monto_real:,.0f}",
+        delta=f"Vs Est. ${total_monto_est:,.0f}",
+    )
+    c2.metric("TONELADAS MÉTRICAS", f"{total_tm_recibida:,.1f} TM")
+    c3.metric("RATIO PROMEDIO", f"${ratio_promedio:,.2f} /TM")
+    c4.metric("GRUPOS ACTIVOS", f"{grupos_activos} / {len(grupos_opt)}")
+
+    st.markdown("---")
+
+    # Gráfico de barras por Grupo de Artículo
+    grp_art = (
+        df_filtered.groupby("Nombre Grupo art.")
         .agg(
-            OC_Unicas=("Pedido", "nunique"),
-            TM_Pedida=("Cantidad TM", "sum"),
             TM_Recibida=("Ctd. TM Recibida", "sum"),
             Valor_Real_USD=("Valor Real $", "sum"),
         )
         .reset_index()
     )
+    grp_art["Ratio_USD_TM"] = grp_art["Valor_Real_USD"] / grp_art["TM_Recibida"]
 
-    grp["Ratio_USD_TM_Recibida"] = grp["Valor_Real_USD"] / grp["TM_Recibida"]
-
-    # KPIs
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Órdenes de Compra", f"{df_filtered['Pedido'].nunique()}")
-    c2.metric("TM Recibidas", f"{grp['TM_Recibida'].sum():,.2f}")
-    c3.metric("Monto Real ($)", f"${grp['Valor_Real_USD'].sum():,.2f}")
-    ratio_gen = (
-        grp["Valor_Real_USD"].sum() / grp["TM_Recibida"].sum()
-        if grp["TM_Recibida"].sum() > 0
-        else 0
-    )
-    c4.metric("Ratio Promedio ($/TM)", f"${ratio_gen:,.2f}")
-
-    st.markdown("---")
-
-    # Gráfico
     fig = px.bar(
-        grp,
+        grp_art.sort_values("Ratio_USD_TM", ascending=False),
         x="Nombre Grupo art.",
-        y="Ratio_USD_TM_Recibida",
-        color="Unidad de negocio",
-        facet_col="Tipo de carga",
-        title="Ratio USD por TM Recibida según Grupo de Artículos",
-        labels={"Ratio_USD_TM_Recibida": "USD / TM Recibida ($)"},
-        barmode="group",
+        y="Ratio_USD_TM",
+        title="Costos por Tonelada Métrica (USD / TM) según Grupo de Artículo",
+        labels={
+            "Ratio_USD_TM": "USD / TM Recibida",
+            "Nombre Grupo art.": "Grupo de Artículo",
+        },
+        text_auto=".2f",
+        color="Ratio_USD_TM",
+        color_continuous_scale="Reds",
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # Tabla de Datos
-    st.subheader("Detalle por Grupo de Artículos")
-    st.dataframe(grp, use_container_width=True)
+    # Detalle por Pedido (Lista desplegada)
+    st.subheader("📋 Detalle de Costos por Pedido (OC)")
+
+    detalle_pedido = (
+        df_filtered.groupby(
+            [
+                "Pedido",
+                "Nombre 1",
+                "Unidad de negocio",
+                "Tipo de carga",
+                "Nombre Grupo art.",
+            ]
+        )
+        .agg(
+            TM_Pedida=("Cantidad TM", "sum"),
+            TM_Recibida=("Ctd. TM Recibida", "sum"),
+            Valor_Estimado_USD=("Valor Estimado $", "sum"),
+            Valor_Real_USD=("Valor Real $", "sum"),
+            Diferencia_USD=("Diferencia $", "sum"),
+        )
+        .reset_index()
+    )
+
+    detalle_pedido["Ratio USD/TM"] = (
+        detalle_pedido["Valor_Real_USD"] / detalle_pedido["TM_Recibida"]
+    )
+    detalle_pedido["Cumplimiento %"] = (
+        detalle_pedido["TM_Recibida"] / detalle_pedido["TM_Pedida"]
+    ) * 100
+
+    # Renombrar columnas para la tabla final
+    detalle_pedido.columns = [
+        "Pedido (OC)",
+        "Proveedor",
+        "Unidad Negocio",
+        "Tipo Carga",
+        "Grupo Artículo",
+        "TM Pedidas",
+        "TM Recibidas",
+        "Valor Est. ($)",
+        "Valor Real ($)",
+        "Diferencia ($)",
+        "Ratio ($/TM)",
+        "Cumplimiento (%)",
+    ]
+
+    st.dataframe(
+        detalle_pedido.style.format(
+            {
+                "TM Pedidas": "{:,.2f}",
+                "TM Recibidas": "{:,.2f}",
+                "Valor Est. ($)": "${:,.2f}",
+                "Valor Real ($)": "${:,.2f}",
+                "Diferencia ($)": "${:,.2f}",
+                "Ratio ($/TM)": "${:,.2f}",
+                "Cumplimiento (%)": "{:.1f}%",
+            }
+        ),
+        use_container_width=True,
+    )
 
 except Exception as e:
     st.error(f"Error al cargar la aplicación: {e}")
