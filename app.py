@@ -84,12 +84,10 @@ def load_data():
 try:
     df = load_data()
 
-    # Limpiar nombres de columnas y filtrar filas donde Pedido esté vacío
+    # Limpiar espacios en nombres de columnas
     df.columns = df.columns.astype(str).str.strip()
-    df = df.dropna(subset=["Pedido"])
 
-    # Identificación precisa de columnas por nombre o posición exacta
-    # Columna N para Sociedad
+    # Identificación precisa de columnas por nombre o posición
     sociedad_col = None
     for col in df.columns:
         if "sociedad" in str(col).strip().lower():
@@ -98,7 +96,6 @@ try:
     if not sociedad_col and len(df.columns) > 13:
         sociedad_col = df.columns[13]
 
-    # Columna AC para TM MES REAL
     tm_col = None
     for col in df.columns:
         if "tm mes real" in str(col).strip().lower():
@@ -107,13 +104,18 @@ try:
     if not tm_col and len(df.columns) > 28:
         tm_col = df.columns[28]
 
-    # Rellenar valores nulos en columnas de texto clave para evitar errores
+    # Limpieza estricta de nulos en columnas esenciales
+    df = df.dropna(subset=["Pedido"]).copy()
     df[sociedad_col] = df[sociedad_col].fillna("Sin Sociedad").astype(str)
-    df["Unidad de negocio"] = df["Unidad de negocio"].fillna("Sin Info")
-    df["Tipo de carga"] = df["Tipo de carga"].fillna("Sin Info")
-    df["Nombre Grupo art."] = df["Nombre Grupo art."].fillna("Sin Info")
-    df["Denominación"] = df["Denominación"].fillna("Sin Info")
-    df["Nombre 1"] = df["Nombre 1"].fillna("Sin Info")
+    df["Unidad de negocio"] = (
+        df["Unidad de negocio"].fillna("Sin Info").astype(str)
+    )
+    df["Tipo de carga"] = df["Tipo de carga"].fillna("Sin Info").astype(str)
+    df["Nombre Grupo art."] = (
+        df["Nombre Grupo art."].fillna("Sin Info").astype(str)
+    )
+    df["Denominación"] = df["Denominación"].fillna("Sin Info").astype(str)
+    df["Nombre 1"] = df["Nombre 1"].fillna("Sin Info").astype(str)
 
     # 4. Sidebar - Encabezado con Logo y Filtros
     if os.path.exists("logo1.png"):
@@ -134,33 +136,33 @@ try:
     st.sidebar.subheader("🔍 Filtros de Búsqueda")
 
     # Filtros dinámicos
-    unidades_opt = sorted(df["Unidad de negocio"].dropna().unique())
+    unidades_opt = sorted([x for x in df["Unidad de negocio"].unique() if x])
     unidades = st.sidebar.multiselect(
         "Unidad de Negocio", options=unidades_opt, default=unidades_opt
     )
 
-    cargas_opt = sorted(df["Tipo de carga"].dropna().unique())
+    cargas_opt = sorted([x for x in df["Tipo de carga"].unique() if x])
     cargas = st.sidebar.multiselect(
         "Tipo de Carga", options=cargas_opt, default=cargas_opt
     )
 
-    grupos_opt = sorted(df["Nombre Grupo art."].dropna().unique())
+    grupos_opt = sorted([x for x in df["Nombre Grupo art."].unique() if x])
     grupos = st.sidebar.multiselect(
         "Nombre Grupo art.", options=grupos_opt, default=grupos_opt
     )
 
-    sociedades_opt = sorted(df[sociedad_col].unique())
+    sociedades_opt = sorted([x for x in df[sociedad_col].unique() if x])
     sociedades = st.sidebar.multiselect(
         "Sociedad", options=sociedades_opt, default=sociedades_opt
     )
 
-    # Aplicar filtros al conjunto de datos
+    # Aplicar filtros
     df_filtered = df[
         (df["Unidad de negocio"].isin(unidades))
         & (df["Tipo de carga"].isin(cargas))
         & (df["Nombre Grupo art."].isin(grupos))
         & (df[sociedad_col].isin(sociedades))
-    ]
+    ].copy()
 
     # 5. Encabezado de la Aplicación
     st.markdown(
@@ -177,7 +179,7 @@ try:
             "No hay registros disponibles para los filtros seleccionados."
         )
     else:
-        # 6. Agrupación por Pedido (Primera línea de TM MES REAL)
+        # 6. Agrupación por Pedido (Primera línea de TM MES REAL por Pedido)
         detalle_pedido = (
             df_filtered.groupby("Pedido", as_index=False)
             .agg(
@@ -192,9 +194,9 @@ try:
                 Valor_Real_USD=("Valor Real $", "sum"),
                 Diferencia_USD=("Diferencia $", "sum"),
             )
+            .dropna(subset=["Grupo_Articulo"])
         )
 
-        # Formato numérico y cálculo de ratio
         detalle_pedido["TM_Real"] = pd.to_numeric(
             detalle_pedido["TM_Real"], errors="coerce"
         ).fillna(0)
@@ -232,7 +234,9 @@ try:
                 TM_Real=("TM_Real", "sum"),
                 Valor_Real_USD=("Valor_Real_USD", "sum"),
             )
+            .dropna(subset=["Grupo_Articulo"])
         )
+
         grp_art["Ratio_USD_TM"] = (
             grp_art["Valor_Real_USD"] / grp_art["TM_Real"]
         ).fillna(0)
