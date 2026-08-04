@@ -84,8 +84,12 @@ def load_data():
 try:
     df = load_data()
 
+    # Limpiar nombres de columnas y filtrar filas donde Pedido esté vacío
+    df.columns = df.columns.astype(str).str.strip()
+    df = df.dropna(subset=["Pedido"])
+
     # Identificación precisa de columnas por nombre o posición exacta
-    # Columna N (índice 13 en base cero) para Sociedad
+    # Columna N para Sociedad
     sociedad_col = None
     for col in df.columns:
         if "sociedad" in str(col).strip().lower():
@@ -94,7 +98,7 @@ try:
     if not sociedad_col and len(df.columns) > 13:
         sociedad_col = df.columns[13]
 
-    # Columna AC (índice 28 en base cero) para TM MES REAL
+    # Columna AC para TM MES REAL
     tm_col = None
     for col in df.columns:
         if "tm mes real" in str(col).strip().lower():
@@ -103,8 +107,13 @@ try:
     if not tm_col and len(df.columns) > 28:
         tm_col = df.columns[28]
 
-    # Limpieza de nulos en Sociedad para el filtro
+    # Rellenar valores nulos en columnas de texto clave para evitar errores
     df[sociedad_col] = df[sociedad_col].fillna("Sin Sociedad").astype(str)
+    df["Unidad de negocio"] = df["Unidad de negocio"].fillna("Sin Info")
+    df["Tipo de carga"] = df["Tipo de carga"].fillna("Sin Info")
+    df["Nombre Grupo art."] = df["Nombre Grupo art."].fillna("Sin Info")
+    df["Denominación"] = df["Denominación"].fillna("Sin Info")
+    df["Nombre 1"] = df["Nombre 1"].fillna("Sin Info")
 
     # 4. Sidebar - Encabezado con Logo y Filtros
     if os.path.exists("logo1.png"):
@@ -145,7 +154,7 @@ try:
         "Sociedad", options=sociedades_opt, default=sociedades_opt
     )
 
-    # Aplicar filtros AL INICIO del flujo
+    # Aplicar filtros al conjunto de datos
     df_filtered = df[
         (df["Unidad de negocio"].isin(unidades))
         & (df["Tipo de carga"].isin(cargas))
@@ -163,136 +172,136 @@ try:
         unsafe_allow_html=True,
     )
 
-    # 6. Agrupación por Pedido respetando la primera línea de TM MES REAL
-    detalle_pedido = (
-        df_filtered.groupby("Pedido")
-        .agg(
-            Denominación=("Denominación", "first"),
-            Proveedor=("Nombre 1", "first"),
-            Sociedad=(sociedad_col, "first"),
-            Unidad_Negocio=("Unidad de negocio", "first"),
-            Tipo_Carga=("Tipo de carga", "first"),
-            Grupo_Articulo=("Nombre Grupo art.", "first"),
-            TM_Real=(
-                tm_col,
-                "first",
-            ),  # Primera línea por pedido para TM MES REAL
-            Valor_Estimado_USD=("Valor Estimado $", "sum"),
-            Valor_Real_USD=("Valor Real $", "sum"),
-            Diferencia_USD=("Diferencia $", "sum"),
+    if df_filtered.empty:
+        st.warning(
+            "No hay registros disponibles para los filtros seleccionados."
         )
-        .reset_index()
-    )
-
-    # Asegurar que TM_Real sea numérico
-    detalle_pedido["TM_Real"] = pd.to_numeric(
-        detalle_pedido["TM_Real"], errors="coerce"
-    ).fillna(0)
-    detalle_pedido["Ratio USD/TM"] = (
-        detalle_pedido["Valor_Real_USD"] / detalle_pedido["TM_Real"]
-    ).fillna(0)
-
-    # 7. Indicadores (KPIs)
-    total_oc = detalle_pedido["Pedido"].nunique()
-    total_tm_real = detalle_pedido["TM_Real"].sum()
-    total_monto_real = detalle_pedido["Valor_Real_USD"].sum()
-    total_monto_est = detalle_pedido["Valor_Estimado_USD"].sum()
-    ratio_promedio = (
-        total_monto_real / total_tm_real if total_tm_real > 0 else 0
-    )
-    grupos_activos = detalle_pedido["Grupo_Articulo"].nunique()
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric(
-        "COSTO REAL TOTAL",
-        f"${total_monto_real:,.0f}",
-        delta=f"Vs Est. ${total_monto_est:,.0f}",
-        delta_color="off",
-    )
-    c2.metric("TONELADAS MÉTRICAS", f"{total_tm_real:,.1f} TM")
-    c3.metric("RATIO PROMEDIO", f"${ratio_promedio:,.2f} /TM")
-    c4.metric("GRUPOS ACTIVOS", f"{grupos_activos} / {len(grupos_opt)}")
-
-    st.markdown("---")
-
-    # 8. Gráfico de Barras por Grupo de Artículo
-    grp_art = (
-        detalle_pedido.groupby("Grupo_Articulo")
-        .agg(
-            TM_Real=("TM_Real", "sum"),
-            Valor_Real_USD=("Valor_Real_USD", "sum"),
+    else:
+        # 6. Agrupación por Pedido (Primera línea de TM MES REAL)
+        detalle_pedido = (
+            df_filtered.groupby("Pedido", as_index=False)
+            .agg(
+                Denominación=("Denominación", "first"),
+                Proveedor=("Nombre 1", "first"),
+                Sociedad=(sociedad_col, "first"),
+                Unidad_Negocio=("Unidad de negocio", "first"),
+                Tipo_Carga=("Tipo de carga", "first"),
+                Grupo_Articulo=("Nombre Grupo art.", "first"),
+                TM_Real=(tm_col, "first"),
+                Valor_Estimado_USD=("Valor Estimado $", "sum"),
+                Valor_Real_USD=("Valor Real $", "sum"),
+                Diferencia_USD=("Diferencia $", "sum"),
+            )
         )
-        .reset_index()
-    )
-    grp_art["Ratio_USD_TM"] = (
-        grp_art["Valor_Real_USD"] / grp_art["TM_Real"]
-    ).fillna(0)
 
-    custom_red_grey_scale = [
-        "#8D99AE",
-        "#ADB5BD",
-        "#E63946",
-        "#E30613",
-        "#990000",
-    ]
+        # Formato numérico y cálculo de ratio
+        detalle_pedido["TM_Real"] = pd.to_numeric(
+            detalle_pedido["TM_Real"], errors="coerce"
+        ).fillna(0)
+        detalle_pedido["Ratio USD/TM"] = (
+            detalle_pedido["Valor_Real_USD"] / detalle_pedido["TM_Real"]
+        ).fillna(0)
 
-    fig = px.bar(
-        grp_art.sort_values("Ratio_USD_TM", ascending=False),
-        x="Grupo_Articulo",
-        y="Ratio_USD_TM",
-        title="Costos por Tonelada Métrica (USD / TM) según Grupo de Artículo",
-        labels={
-            "Ratio_USD_TM": "USD / TM Real",
-            "Grupo_Articulo": "Grupo de Artículo",
-        },
-        text_auto=".2f",
-        color="Ratio_USD_TM",
-        color_continuous_scale=custom_red_grey_scale,
-    )
+        # 7. Indicadores (KPIs)
+        total_oc = detalle_pedido["Pedido"].nunique()
+        total_tm_real = detalle_pedido["TM_Real"].sum()
+        total_monto_real = detalle_pedido["Valor_Real_USD"].sum()
+        total_monto_est = detalle_pedido["Valor_Estimado_USD"].sum()
+        ratio_promedio = (
+            total_monto_real / total_tm_real if total_tm_real > 0 else 0
+        )
+        grupos_activos = detalle_pedido["Grupo_Articulo"].nunique()
 
-    fig.update_layout(
-        plot_bgcolor="rgba(0,0,0,0)",
-        paper_bgcolor="rgba(0,0,0,0)",
-        font=dict(family="Arial, sans-serif", size=12, color="#212529"),
-        title_font=dict(size=18, color="#1A1A1A"),
-        xaxis=dict(showgrid=False),
-        yaxis=dict(showgrid=True, gridcolor="#E9ECEF"),
-        coloraxis_showscale=False,
-    )
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric(
+            "COSTO REAL TOTAL",
+            f"${total_monto_real:,.0f}",
+            delta=f"Vs Est. ${total_monto_est:,.0f}",
+            delta_color="off",
+        )
+        c2.metric("TONELADAS MÉTRICAS", f"{total_tm_real:,.1f} TM")
+        c3.metric("RATIO PROMEDIO", f"${ratio_promedio:,.2f} /TM")
+        c4.metric("GRUPOS ACTIVOS", f"{grupos_activos} / {len(grupos_opt)}")
 
-    st.plotly_chart(fig, use_container_width=True)
+        st.markdown("---")
 
-    # 9. Tabla Detallada
-    st.subheader("📋 Detalle de Costos por Pedido (OC) y Denominación")
+        # 8. Gráfico de Barras por Grupo de Artículo
+        grp_art = (
+            detalle_pedido.groupby("Grupo_Articulo", as_index=False)
+            .agg(
+                TM_Real=("TM_Real", "sum"),
+                Valor_Real_USD=("Valor_Real_USD", "sum"),
+            )
+        )
+        grp_art["Ratio_USD_TM"] = (
+            grp_art["Valor_Real_USD"] / grp_art["TM_Real"]
+        ).fillna(0)
 
-    detalle_tabla = detalle_pedido.copy()
-    detalle_tabla.columns = [
-        "Pedido (OC)",
-        "Denominación",
-        "Proveedor",
-        "Sociedad",
-        "Unidad Negocio",
-        "Tipo Carga",
-        "Grupo Artículo",
-        "TM Mes Real",
-        "Valor Est. ($)",
-        "Valor Real ($)",
-        "Diferencia ($)",
-        "Ratio ($/TM)",
-    ]
+        custom_red_grey_scale = [
+            "#8D99AE",
+            "#ADB5BD",
+            "#E63946",
+            "#E30613",
+            "#990000",
+        ]
 
-    st.dataframe(
-        detalle_tabla.style.format(
-            {
-                "TM Mes Real": "{:,.2f}",
-                "Valor Est. ($)": "${:,.2f}",
-                "Valor Real ($)": "${:,.2f}",
-                "Diferencia ($)": "${:,.2f}",
-                "Ratio ($/TM)": "${:,.2f}",
-            }
-        ),
-        use_container_width=True,
-    )
+        fig = px.bar(
+            grp_art.sort_values("Ratio_USD_TM", ascending=False),
+            x="Grupo_Articulo",
+            y="Ratio_USD_TM",
+            title="Costos por Tonelada Métrica (USD / TM) según Grupo de Artículo",
+            labels={
+                "Ratio_USD_TM": "USD / TM Real",
+                "Grupo_Articulo": "Grupo de Artículo",
+            },
+            text_auto=".2f",
+            color="Ratio_USD_TM",
+            color_continuous_scale=custom_red_grey_scale,
+        )
+
+        fig.update_layout(
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)",
+            font=dict(family="Arial, sans-serif", size=12, color="#212529"),
+            title_font=dict(size=18, color="#1A1A1A"),
+            xaxis=dict(showgrid=False),
+            yaxis=dict(showgrid=True, gridcolor="#E9ECEF"),
+            coloraxis_showscale=False,
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+        # 9. Tabla Detallada
+        st.subheader("📋 Detalle de Costos por Pedido (OC) y Denominación")
+
+        detalle_tabla = detalle_pedido.copy()
+        detalle_tabla.columns = [
+            "Pedido (OC)",
+            "Denominación",
+            "Proveedor",
+            "Sociedad",
+            "Unidad Negocio",
+            "Tipo Carga",
+            "Grupo Artículo",
+            "TM Mes Real",
+            "Valor Est. ($)",
+            "Valor Real ($)",
+            "Diferencia ($)",
+            "Ratio ($/TM)",
+        ]
+
+        st.dataframe(
+            detalle_tabla.style.format(
+                {
+                    "TM Mes Real": "{:,.2f}",
+                    "Valor Est. ($)": "${:,.2f}",
+                    "Valor Real ($)": "${:,.2f}",
+                    "Diferencia ($)": "${:,.2f}",
+                    "Ratio ($/TM)": "${:,.2f}",
+                }
+            ),
+            use_container_width=True,
+        )
 
 except Exception as e:
     st.error(f"Error al cargar la aplicación: {e}")
