@@ -3,18 +3,84 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+# 1. Configuración de la página
 st.set_page_config(
-    page_title="Panel de Costos de Internación",
+    page_title="Panel de Costos de Internación | MULTI",
+    page_icon="🔴",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-st.title("📊 Panel de Costos de Internación")
+# 2. Estilos personalizados (CSS) - Colores e Identidad MULTI
 st.markdown(
-    "Desglose de costos reales de nacionalización por tipo de carga, unidad de negocio, país y grupo de artículo, expresados en costo por tonelada métrica (TM)."
+    """
+    <style>
+        /* Fondo del Sidebar en Gris Claro */
+        [data-testid="stSidebar"] {
+            background-color: #E9ECEF !important;
+        }
+        
+        /* Ajuste de colores en el Sidebar */
+        [data-testid="stSidebar"] * {
+            color: #212529 !important;
+        }
+
+        /* Tarjetas de Indicadores (KPIs) */
+        [data-testid="stMetric"] {
+            background-color: #FFFFFF;
+            border: 1px solid #DEE2E6;
+            padding: 15px 20px;
+            border-radius: 12px;
+            box-shadow: 0px 3px 8px rgba(0,0,0,0.05);
+        }
+
+        [data-testid="stMetricLabel"] {
+            color: #6C757D !important;
+            font-weight: 700;
+            font-size: 0.85rem;
+            letter-spacing: 0.5px;
+        }
+
+        [data-testid="stMetricValue"] {
+            color: #1A1A1A !important;
+            font-weight: 800;
+        }
+
+        /* Tags/Pills de filtros seleccionados */
+        span[data-baseweb="tag"] {
+            background-color: #E30613 !important;
+        }
+        
+        /* Encabezados e Historia de Marca */
+        .main-title {
+            color: #1A1A1A;
+            font-size: 2.2rem;
+            font-weight: 800;
+            margin-bottom: 0px;
+        }
+        
+        .sub-title {
+            color: #E30613;
+            font-size: 0.95rem;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            margin-bottom: 20px;
+        }
+
+        /* Línea divisora roja */
+        hr {
+            border-top: 2px solid #E30613 !important;
+            margin-top: 15px;
+            margin-bottom: 25px;
+        }
+    </style>
+""",
+    unsafe_allow_html=True,
 )
 
 
+# 3. Carga de Datos
 @st.cache_data
 def load_data():
     file_name = "1 julio internacion_2.XLSX"
@@ -32,8 +98,18 @@ def load_data():
 try:
     df = load_data()
 
-    # Sidebar - Filtros
-    st.sidebar.header("🔍 Filtros de Búsqueda")
+    # 4. Sidebar - Encabezado y Filtros
+    st.sidebar.markdown(
+        """
+        <div style="text-align: center; padding: 10px 0 20px 0;">
+            <h2 style="color: #E30613 !important; font-weight: 900; margin: 0; font-size: 28px;">MULTI</h2>
+            <span style="color: #495057 !important; font-size: 11px; font-weight: 700; letter-spacing: 2px;">LÍDER EN ACERO</span>
+        </div>
+    """,
+        unsafe_allow_html=True,
+    )
+
+    st.sidebar.subheader("🔍 Filtros de Búsqueda")
 
     # Filtro Unidad de Negocio
     unidades_opt = sorted(df["Unidad de negocio"].dropna().unique())
@@ -59,7 +135,7 @@ try:
         "País de Origen", options=paises_opt, default=paises_opt
     )
 
-    # Filtrado dinámico
+    # Aplicar filtros
     df_filtered = df[
         (df["Unidad de negocio"].isin(unidades))
         & (df["Tipo de carga"].isin(cargas))
@@ -67,7 +143,17 @@ try:
         & (df["PAIS"].isin(paises))
     ]
 
-    # Cálculos globales
+    # 5. Encabezado de la Aplicación
+    st.markdown(
+        '<p class="main-title">Panel de Costos de Internación</p>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<p class="sub-title">Análisis Operativo y Nacionalización de Acero</p>',
+        unsafe_allow_html=True,
+    )
+
+    # 6. Cálculos de Indicadores (KPIs)
     total_oc = df_filtered["Pedido"].nunique()
     total_tm_recibida = df_filtered["Ctd. TM Recibida"].sum()
     total_monto_real = df_filtered["Valor Real $"].sum()
@@ -77,12 +163,13 @@ try:
     )
     grupos_activos = df_filtered["Nombre Grupo art."].nunique()
 
-    # Indicadores (KPIs)
+    # Mostrar KPIs en 4 columnas
     c1, c2, c3, c4 = st.columns(4)
     c1.metric(
         "COSTO REAL TOTAL",
         f"${total_monto_real:,.0f}",
         delta=f"Vs Est. ${total_monto_est:,.0f}",
+        delta_color="off",
     )
     c2.metric("TONELADAS MÉTRICAS", f"{total_tm_recibida:,.1f} TM")
     c3.metric("RATIO PROMEDIO", f"${ratio_promedio:,.2f} /TM")
@@ -90,7 +177,7 @@ try:
 
     st.markdown("---")
 
-    # Gráfico de barras por Grupo de Artículo
+    # 7. Gráfico en escala de Rojos y Grises
     grp_art = (
         df_filtered.groupby("Nombre Grupo art.")
         .agg(
@@ -100,6 +187,15 @@ try:
         .reset_index()
     )
     grp_art["Ratio_USD_TM"] = grp_art["Valor_Real_USD"] / grp_art["TM_Recibida"]
+
+    # Paleta personalizada: De gris acero a rojo MULTI
+    custom_red_grey_scale = [
+        "#8D99AE",
+        "#ADB5BD",
+        "#E63946",
+        "#E30613",
+        "#990000",
+    ]
 
     fig = px.bar(
         grp_art.sort_values("Ratio_USD_TM", ascending=False),
@@ -112,11 +208,22 @@ try:
         },
         text_auto=".2f",
         color="Ratio_USD_TM",
-        color_continuous_scale="Reds",
+        color_continuous_scale=custom_red_grey_scale,
     )
+
+    fig.update_layout(
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Arial, sans-serif", size=12, color="#212529"),
+        title_font=dict(size=18, color="#1A1A1A"),
+        xaxis=dict(showgrid=False),
+        yaxis=dict(showgrid=True, gridcolor="#E9ECEF"),
+        coloraxis_showscale=False,
+    )
+
     st.plotly_chart(fig, use_container_width=True)
 
-    # Detalle por Pedido y Denominación
+    # 8. Detalle de Tabla por Pedido (OC) y Denominación
     st.subheader("📋 Detalle de Costos por Pedido (OC) y Denominación")
 
     detalle_pedido = (
