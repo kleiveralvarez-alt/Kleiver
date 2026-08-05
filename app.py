@@ -236,61 +236,68 @@ try:
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
-    # 5. FILTROS EN CASCADA (DEPENDIENTES)
-    with st.expander("🔍 **FILTROS DE BÚSQUEDA (CASCADA)**", expanded=True):
+    # 5. FILTROS INDEPENDIENTES Y MULTIDIRECCIONALES (CRUZADOS)
+    with st.expander("🔍 **FILTROS DE BÚSQUEDA INTERACTIVOS**", expanded=True):
         col_f1, col_f2, col_f3, col_f4 = st.columns(4)
 
-        # Nivel 1: Sociedad
+        # Opciones globales completas
+        all_socidades = sorted([x for x in df[sociedad_col].unique() if str(x) != "nan"])
+        all_unidades = sorted([x for x in df[unid_col].unique() if str(x) != "nan"])
+        all_cargas = sorted([x for x in df[carga_col].unique() if str(x) != "nan"])
+        all_materiales = sorted([x for x in df[material_col].unique() if str(x) != "nan"])
+
+        # Inicialización de Session State para persistencia de selecciones independientes
+        if "sel_soc" not in st.session_state:
+            st.session_state.sel_soc = all_socidades
+        if "sel_uni" not in st.session_state:
+            st.session_state.sel_uni = all_unidades
+        if "sel_car" not in st.session_state:
+            st.session_state.sel_car = all_cargas
+        if "sel_mat" not in st.session_state:
+            st.session_state.sel_mat = all_materiales
+
+        # Cálculos de opciones dinámicas cruzadas (cada filtro responde a la combinación de los otros 3)
+        opt_soc = sorted(df[
+            df[unid_col].isin(st.session_state.sel_uni) &
+            df[carga_col].isin(st.session_state.sel_car) &
+            df[material_col].isin(st.session_state.sel_mat)
+        ][sociedad_col].unique())
+
+        opt_uni = sorted(df[
+            df[sociedad_col].isin(st.session_state.sel_soc) &
+            df[carga_col].isin(st.session_state.sel_car) &
+            df[material_col].isin(st.session_state.sel_mat)
+        ][unid_col].unique())
+
+        opt_car = sorted(df[
+            df[sociedad_col].isin(st.session_state.sel_soc) &
+            df[unid_col].isin(st.session_state.sel_uni) &
+            df[material_col].isin(st.session_state.sel_mat)
+        ][carga_col].unique())
+
+        opt_mat = sorted(df[
+            df[sociedad_col].isin(st.session_state.sel_soc) &
+            df[unid_col].isin(st.session_state.sel_uni) &
+            df[carga_col].isin(st.session_state.sel_car)
+        ][material_col].unique())
+
+        # Renderizado de selectores independientes
         with col_f1:
-            sociedades_opt = sorted(
-                [x for x in df[sociedad_col].unique() if str(x) != "nan"]
-            )
-            sociedades = st.multiselect(
-                "1. Sociedad", options=sociedades_opt, default=sociedades_opt
-            )
-
-        # Filtrado para Nivel 2
-        df_lvl1 = df[df[sociedad_col].isin(sociedades)]
-
-        # Nivel 2: Unidad de Negocio
+            sociedades = st.multiselect("1. Sociedad", options=opt_soc, default=[x for x in st.session_state.sel_soc if x in opt_soc], key="sel_soc")
         with col_f2:
-            unidades_opt = sorted(
-                [x for x in df_lvl1[unid_col].unique() if str(x) != "nan"]
-            )
-            unidades = st.multiselect(
-                "2. Unidad de Negocio",
-                options=unidades_opt,
-                default=unidades_opt,
-            )
-
-        # Filtrado para Nivel 3
-        df_lvl2 = df_lvl1[df_lvl1[unid_col].isin(unidades)]
-
-        # Nivel 3: Tipo de Carga
+            unidades = st.multiselect("2. Unidad de Negocio", options=opt_uni, default=[x for x in st.session_state.sel_uni if x in opt_uni], key="sel_uni")
         with col_f3:
-            cargas_opt = sorted(
-                [x for x in df_lvl2[carga_col].unique() if str(x) != "nan"]
-            )
-            cargas = st.multiselect(
-                "3. Tipo de Carga", options=cargas_opt, default=cargas_opt
-            )
-
-        # Filtrado para Nivel 4
-        df_lvl3 = df_lvl2[df_lvl2[carga_col].isin(cargas)]
-
-        # Nivel 4: Tipo de Material
+            cargas = st.multiselect("3. Tipo de Carga", options=opt_car, default=[x for x in st.session_state.sel_car if x in opt_car], key="sel_car")
         with col_f4:
-            materiales_opt = sorted(
-                [x for x in df_lvl3[material_col].unique() if str(x) != "nan"]
-            )
-            materiales = st.multiselect(
-                "4. Tipo de Material",
-                options=materiales_opt,
-                default=materiales_opt,
-            )
+            materiales = st.multiselect("4. Tipo de Material", options=opt_mat, default=[x for x in st.session_state.sel_mat if x in opt_mat], key="sel_mat")
 
-    # Filtro final aplicado
-    df_filtered = df_lvl3[df_lvl3[material_col].isin(materiales)].copy()
+    # Filtro final aplicado cruzando los 4 selectores
+    df_filtered = df[
+        df[sociedad_col].isin(sociedades) &
+        df[unid_col].isin(unidades) &
+        df[carga_col].isin(cargas) &
+        df[material_col].isin(materiales)
+    ].copy()
 
     if df_filtered.empty:
         st.warning(
@@ -344,7 +351,7 @@ try:
         c2.metric("TONELADAS MÉTRICAS", f"{total_tm_real:,.2f} TM")
         c3.metric("RATIO PROMEDIO", f"${ratio_promedio:,.2f} /TM")
         c4.metric(
-            "TIPOS DE MATERIAL", f"{materiales_activos} / {len(materiales_opt)}"
+            "TIPOS DE MATERIAL", f"{materiales_activos} / {len(all_materiales)}"
         )
 
         st.markdown("---")
