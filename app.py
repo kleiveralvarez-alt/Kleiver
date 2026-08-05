@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-# 1. Configuración de la página en modo WIDE
+# 1. Configuración de la página
 st.set_page_config(
     page_title="Panel de Costos de Internación | MULTI",
     page_icon="🔴",
@@ -11,18 +11,18 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# 2. Estilos personalizados (CSS) - Ocultar Sidebar y Maximizar Área
+# 2. Estilos personalizados (CSS) - Ocultar Sidebar y Maximizar Pantalla
 st.markdown(
     """
     <style>
-        /* Ocultar completamente el Sidebar y el botón del menú desplegable */
+        /* Ocultar Sidebar lateral */
         [data-testid="stSidebar"], [data-testid="collapsedControl"] {
             display: none !important;
         }
 
-        /* Margen superior adecuado para que el logo no se corte */
+        /* Ajuste de márgenes superiores para evitar cortes */
         .block-container {
-            padding-top: 3rem !important;
+            padding-top: 2rem !important;
             padding-bottom: 2rem !important;
             padding-left: 2rem !important;
             padding-right: 2rem !important;
@@ -172,7 +172,7 @@ try:
         df.columns[min(8, len(df.columns) - 1)],
     )
 
-    # Otras columnas
+    # Otras columnas secundarias
     unid_col = next(
         (c for c in df.columns if "unidad de negocio" in c.lower()),
         df.columns[min(1, len(df.columns) - 1)],
@@ -205,14 +205,14 @@ try:
     for c in [tm_col, val_est_col, val_real_col, dif_col]:
         df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
 
-    # 4. ENCABEZADO CON LOGO COMPLETO Y ALINEADO
-    col_logo, col_titulo = st.columns([1, 4], vertical_alignment="center")
+    # 4. ENCABEZADO FIJO CON LOGO Y TÍTULO
+    col_logo, col_titulo = st.columns([1, 4])
 
     with col_logo:
         if os.path.exists("logo1.png"):
-            st.image("logo1.png", use_column_width=True)
+            st.image("logo1.png", width=220)
         elif os.path.exists("logo.png"):
-            st.image("logo.png", use_column_width=True)
+            st.image("logo.png", width=220)
         else:
             st.markdown(
                 """
@@ -349,7 +349,7 @@ try:
 
         st.markdown("---")
 
-        # 8. Gráfico por Tipo de Material basado en USD REAL / TM REAL
+        # 8. Gráfico por Tipo de Material
         grp_mat = detalle_pedido.groupby("Tipo_Material", as_index=False).agg(
             TM_Real=("TM_Real", "sum"), USD_Real=("USD_Real", "sum")
         )
@@ -391,7 +391,7 @@ try:
 
         st.plotly_chart(fig, use_container_width=True)
 
-        # 9. Tabla Detallada a Pantalla Completa
+        # 9. Tabla Detallada
         st.subheader("📋 Detalle de Costos por Pedido (OC) y Denominación")
 
         detalle_tabla = detalle_pedido.copy()
