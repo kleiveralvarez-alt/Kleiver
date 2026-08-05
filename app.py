@@ -11,7 +11,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# 2. Estilos personalizados (CSS) - Ajuste de márgenes superiores
+# 2. Estilos personalizados (CSS) - Ocultar Sidebar y Maximizar Área
 st.markdown(
     """
     <style>
@@ -210,9 +210,9 @@ try:
 
     with col_logo:
         if os.path.exists("logo1.png"):
-            st.image("logo1.png", use_container_width=True)
+            st.image("logo1.png", use_column_width=True)
         elif os.path.exists("logo.png"):
-            st.image("logo.png", use_container_width=True)
+            st.image("logo.png", use_column_width=True)
         else:
             st.markdown(
                 """
