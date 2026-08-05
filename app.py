@@ -11,7 +11,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# 2. Estilos personalizados (CSS) - Ajuste de márgenes superiores
+# 2. Estilos personalizados (CSS)
 st.markdown(
     """
     <style>
@@ -205,7 +205,7 @@ try:
     for c in [tm_col, val_est_col, val_real_col, dif_col]:
         df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
 
-    # 4. ENCABEZADO CON LOGO COMPLETO Y ALINEADO
+    # 4. ENCABEZADO
     col_logo, col_titulo = st.columns([1, 4], vertical_alignment="center")
 
     with col_logo:
@@ -236,68 +236,65 @@ try:
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
-    # 5. FILTROS INDEPENDIENTES Y MULTIDIRECCIONALES (CRUZADOS)
+    # 5. FILTROS INDEPENDIENTES Y MULTIDIRECCIONALES (Cualquier orden)
     with st.expander("🔍 **FILTROS DE BÚSQUEDA INTERACTIVOS**", expanded=True):
         col_f1, col_f2, col_f3, col_f4 = st.columns(4)
 
-        # Opciones globales completas
-        all_socidades = sorted([x for x in df[sociedad_col].unique() if str(x) != "nan"])
-        all_unidades = sorted([x for x in df[unid_col].unique() if str(x) != "nan"])
-        all_cargas = sorted([x for x in df[carga_col].unique() if str(x) != "nan"])
-        all_materiales = sorted([x for x in df[material_col].unique() if str(x) != "nan"])
+        # Inicializar el estado de sesión si no existe
+        if "f_soc" not in st.session_state:
+            st.session_state.f_soc = []
+        if "f_uni" not in st.session_state:
+            st.session_state.f_uni = []
+        if "f_car" not in st.session_state:
+            st.session_state.f_car = []
+        if "f_mat" not in st.session_state:
+            st.session_state.f_mat = []
 
-        # Inicialización de Session State para persistencia de selecciones independientes
-        if "sel_soc" not in st.session_state:
-            st.session_state.sel_soc = all_socidades
-        if "sel_uni" not in st.session_state:
-            st.session_state.sel_uni = all_unidades
-        if "sel_car" not in st.session_state:
-            st.session_state.sel_car = all_cargas
-        if "sel_mat" not in st.session_state:
-            st.session_state.sel_mat = all_materiales
+        # Opciones dinámicas según los otros 3 filtros activos
+        df_soc = df.copy()
+        if st.session_state.f_uni: df_soc = df_soc[df_soc[unid_col].isin(st.session_state.f_uni)]
+        if st.session_state.f_car: df_soc = df_soc[df_soc[carga_col].isin(st.session_state.f_car)]
+        if st.session_state.f_mat: df_soc = df_soc[df_soc[material_col].isin(st.session_state.f_mat)]
+        opts_soc = sorted([x for x in df_soc[sociedad_col].unique() if str(x) != "nan"])
 
-        # Cálculos de opciones dinámicas cruzadas (cada filtro responde a la combinación de los otros 3)
-        opt_soc = sorted(df[
-            df[unid_col].isin(st.session_state.sel_uni) &
-            df[carga_col].isin(st.session_state.sel_car) &
-            df[material_col].isin(st.session_state.sel_mat)
-        ][sociedad_col].unique())
+        df_uni = df.copy()
+        if st.session_state.f_soc: df_uni = df_uni[df_uni[sociedad_col].isin(st.session_state.f_soc)]
+        if st.session_state.f_car: df_uni = df_uni[df_uni[carga_col].isin(st.session_state.f_car)]
+        if st.session_state.f_mat: df_uni = df_uni[df_uni[material_col].isin(st.session_state.f_mat)]
+        opts_uni = sorted([x for x in df_uni[unid_col].unique() if str(x) != "nan"])
 
-        opt_uni = sorted(df[
-            df[sociedad_col].isin(st.session_state.sel_soc) &
-            df[carga_col].isin(st.session_state.sel_car) &
-            df[material_col].isin(st.session_state.sel_mat)
-        ][unid_col].unique())
+        df_car = df.copy()
+        if st.session_state.f_soc: df_car = df_car[df_car[sociedad_col].isin(st.session_state.f_soc)]
+        if st.session_state.f_uni: df_car = df_car[df_car[unid_col].isin(st.session_state.f_uni)]
+        if st.session_state.f_mat: df_car = df_car[df_car[material_col].isin(st.session_state.f_mat)]
+        opts_car = sorted([x for x in df_car[carga_col].unique() if str(x) != "nan"])
 
-        opt_car = sorted(df[
-            df[sociedad_col].isin(st.session_state.sel_soc) &
-            df[unid_col].isin(st.session_state.sel_uni) &
-            df[material_col].isin(st.session_state.sel_mat)
-        ][carga_col].unique())
+        df_mat = df.copy()
+        if st.session_state.f_soc: df_mat = df_mat[df_mat[sociedad_col].isin(st.session_state.f_soc)]
+        if st.session_state.f_uni: df_mat = df_mat[df_mat[unid_col].isin(st.session_state.f_uni)]
+        if st.session_state.f_car: df_mat = df_mat[df_mat[carga_col].isin(st.session_state.f_car)]
+        opts_mat = sorted([x for x in df_mat[material_col].unique() if str(x) != "nan"])
 
-        opt_mat = sorted(df[
-            df[sociedad_col].isin(st.session_state.sel_soc) &
-            df[unid_col].isin(st.session_state.sel_uni) &
-            df[carga_col].isin(st.session_state.sel_car)
-        ][material_col].unique())
-
-        # Renderizado de selectores independientes
+        # Renderizado de filtros
         with col_f1:
-            sociedades = st.multiselect("1. Sociedad", options=opt_soc, default=[x for x in st.session_state.sel_soc if x in opt_soc], key="sel_soc")
+            sociedades = st.multiselect("1. Sociedad", options=opts_soc, key="f_soc", placeholder="Todas las Sociedades")
         with col_f2:
-            unidades = st.multiselect("2. Unidad de Negocio", options=opt_uni, default=[x for x in st.session_state.sel_uni if x in opt_uni], key="sel_uni")
+            unidades = st.multiselect("2. Unidad de Negocio", options=opts_uni, key="f_uni", placeholder="Todas las Unidades")
         with col_f3:
-            cargas = st.multiselect("3. Tipo de Carga", options=opt_car, default=[x for x in st.session_state.sel_car if x in opt_car], key="sel_car")
+            cargas = st.multiselect("3. Tipo de Carga", options=opts_car, key="f_car", placeholder="Todos los Tipos")
         with col_f4:
-            materiales = st.multiselect("4. Tipo de Material", options=opt_mat, default=[x for x in st.session_state.sel_mat if x in opt_mat], key="sel_mat")
+            materiales = st.multiselect("4. Tipo de Material", options=opts_mat, key="f_mat", placeholder="Todos los Materiales")
 
-    # Filtro final aplicado cruzando los 4 selectores
-    df_filtered = df[
-        df[sociedad_col].isin(sociedades) &
-        df[unid_col].isin(unidades) &
-        df[carga_col].isin(cargas) &
-        df[material_col].isin(materiales)
-    ].copy()
+    # Aplicar filtrado final sobre el DataFrame
+    df_filtered = df.copy()
+    if sociedades:
+        df_filtered = df_filtered[df_filtered[sociedad_col].isin(sociedades)]
+    if unidades:
+        df_filtered = df_filtered[df_filtered[unid_col].isin(unidades)]
+    if cargas:
+        df_filtered = df_filtered[df_filtered[carga_col].isin(cargas)]
+    if materiales:
+        df_filtered = df_filtered[df_filtered[material_col].isin(materiales)]
 
     if df_filtered.empty:
         st.warning(
@@ -335,10 +332,10 @@ try:
         total_usd_real = detalle_pedido["USD_Real"].sum()
         total_usd_est = detalle_pedido["USD_Estimado"].sum()
 
-        # Ratio Promedio General = Suma USD REAL / Suma TM REAL
         ratio_promedio = (
             total_usd_real / total_tm_real if total_tm_real > 0 else 0
         )
+        todos_materiales_base = df[material_col].nunique()
         materiales_activos = detalle_pedido["Tipo_Material"].nunique()
 
         c1, c2, c3, c4 = st.columns(4)
@@ -351,12 +348,12 @@ try:
         c2.metric("TONELADAS MÉTRICAS", f"{total_tm_real:,.2f} TM")
         c3.metric("RATIO PROMEDIO", f"${ratio_promedio:,.2f} /TM")
         c4.metric(
-            "TIPOS DE MATERIAL", f"{materiales_activos} / {len(all_materiales)}"
+            "TIPOS DE MATERIAL", f"{materiales_activos} / {todos_materiales_base}"
         )
 
         st.markdown("---")
 
-        # 8. Gráfico por Tipo de Material basado en USD REAL / TM REAL
+        # 8. Gráfico por Tipo de Material
         grp_mat = detalle_pedido.groupby("Tipo_Material", as_index=False).agg(
             TM_Real=("TM_Real", "sum"), USD_Real=("USD_Real", "sum")
         )
@@ -398,7 +395,7 @@ try:
 
         st.plotly_chart(fig, use_container_width=True)
 
-        # 9. Tabla Detallada a Pantalla Completa
+        # 9. Tabla Detallada
         st.subheader("📋 Detalle de Costos por Pedido (OC) y Denominación")
 
         detalle_tabla = detalle_pedido.copy()
@@ -417,7 +414,6 @@ try:
             "Ratio ($/TM)",
         ]
 
-        # Formato numérico en la tabla
         for col in ["USD Estimado", "USD Real", "Diferencia ($)", "Ratio ($/TM)"]:
             detalle_tabla[col] = detalle_tabla[col].map("${:,.2f}".format)
 
