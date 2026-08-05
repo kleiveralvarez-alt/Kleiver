@@ -21,16 +21,47 @@ st.set_page_config(
 )
 
 # Estilos CSS
-st.markdown(
-    """
-    <style>
-        [data-testid="stSidebar"], [data-testid="collapsedControl"] { display: none !important; }
-        .block-container { padding-top: 2rem !important; padding-bottom: 2rem !important; }
-        [data-testid="stMetric"] { background-color: #FFFFFF; border: 1px solid #DEE2E6; padding: 15px; border-radius: 10px; }
+<style>
+        /* Desplazar el contenido hacia abajo para evitar que el logo se corte */
+        .block-container {
+            padding-top: 3.5rem !important;
+            padding-bottom: 1rem !important;
+        }
+        /* Ajuste de nitidez y margen del logo */
+        .logo-img {
+            margin-top: 15px;
+            margin-bottom: 15px;
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: crisp-edges;
+        }
     </style>
-""",
-    unsafe_allow_html=True,
-)
+""", unsafe_allow_html=True)
+
+# 1. Encabezado con Logo (Ajustado)
+# Asegúrate de colocar la ruta o URL correcta de tu logo
+# st.image("logo.png", width=280) 
+
+# 2. Paleta de colores (Rojos y Grises)
+COLOR_RED_SHADES = ['#8B0000', '#C00000', '#FF0000', '#FF4D4D', '#FF8080']
+COLOR_GREY_SHADES = ['#404040', '#595959', '#7F7F7F', '#A6A6A6', '#D9D9D9']
+
+# Ejemplo de función para generar gráficos de barras con la nueva paleta
+def crear_grafico_barras(df, col_x, col_y, titulo, es_real=True):
+    colores = COLOR_RED_SHADES if es_real else COLOR_GREY_SHADES
+    fig = px.bar(
+        df, 
+        x=col_x, 
+        y=col_y, 
+        title=titulo,
+        color_discrete_sequence=colores
+    )
+    fig.update_layout(
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        font=dict(color="#333333"),
+        margin=dict(l=20, r=20, t=40, b=20)
+    )
+    return fig
 
 
 # Búsqueda automática del archivo de datos
