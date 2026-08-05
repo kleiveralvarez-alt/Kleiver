@@ -1,33 +1,17 @@
-import os
-import sys
+import streamlit as st
+import pandas as pd
+import plotly.express as px
 
-# Captura de errores críticos durante la importación
-try:
-    import pandas as pd
-    import plotly.express as px
-    import streamlit as st
-except Exception as e:
-    import streamlit as st
+# Configuración inicial de la página
+st.set_page_config(page_title="Dashboard Multi", layout="wide")
 
-    st.error(f"Error al importar librerías: {e}")
-    st.stop()
-
-# Configuración de página
-st.set_page_config(
-    page_title="Panel de Costos de Internación",
-    page_icon="🔴",
-    layout="wide",
-    initial_sidebar_state="collapsed",
-)
-
-# Estilos CSS
-<style>
-        /* Desplazar el contenido hacia abajo para evitar que el logo se corte */
+# CSS personalizado para bajar el logo, ajustar la interfaz y darle nitidez
+st.markdown("""
+    <style>
         .block-container {
             padding-top: 3.5rem !important;
             padding-bottom: 1rem !important;
         }
-        /* Ajuste de nitidez y margen del logo */
         .logo-img {
             margin-top: 15px;
             margin-bottom: 15px;
@@ -37,206 +21,110 @@ st.set_page_config(
     </style>
 """, unsafe_allow_html=True)
 
-# 1. Encabezado con Logo (Ajustado)
-# Asegúrate de colocar la ruta o URL correcta de tu logo
-# st.image("logo.png", width=280) 
-
-# 2. Paleta de colores (Rojos y Grises)
+# Paletas de colores oficiales (Rojos para Real, Grises para Estimado)
 COLOR_RED_SHADES = ['#8B0000', '#C00000', '#FF0000', '#FF4D4D', '#FF8080']
-COLOR_GREY_SHADES = ['#404040', '#595959', '#7F7F7F', '#A6A6A6', '#D9D9D9']
+COLOR_GREY_SHADES = ['#333333', '#555555', '#777777', '#999999', '#BBBBBB']
 
-# Ejemplo de función para generar gráficos de barras con la nueva paleta
-def crear_grafico_barras(df, col_x, col_y, titulo, es_real=True):
-    colores = COLOR_RED_SHADES if es_real else COLOR_GREY_SHADES
-    fig = px.bar(
-        df, 
-        x=col_x, 
-        y=col_y, 
-        title=titulo,
-        color_discrete_sequence=colores
-    )
-    fig.update_layout(
-        plot_bgcolor="white",
-        paper_bgcolor="white",
-        font=dict(color="#333333"),
-        margin=dict(l=20, r=20, t=40, b=20)
-    )
-    return fig
+# 1. Cargar archivo de datos en la barra lateral
+st.sidebar.header("Configuración de Datos")
+uploaded_file = st.sidebar.file_drop_here if hasattr(st.sidebar, "file_drop_here") else st.sidebar.file_uploader("Cargar archivo Excel o CSV", type=["xlsx", "csv"])
 
-
-# Búsqueda automática del archivo de datos
-def cargar_datos():
-    archivos = [
-        f for f in os.listdir(".") if f.lower().endswith((".xlsx", ".xls"))
-    ]
-    if not archivos:
-        st.error("No se encontró ningún archivo Excel (.xlsx) en el repositorio.")
-        st.stop()
-
-    # Priorizar el archivo especificado
-    archivo_target = None
-    for f in archivos:
-        if "internacion para dash" in f.lower():
-            archivo_target = f
-            break
-    if not archivo_target:
-        archivo_target = archivos[0]
-
-    return pd.read_excel(archivo_target), archivo_target
-
-
-try:
-    df_raw, nombre_archivo = cargar_datos()
-
-    # Encabezado
-    col_logo, col_titulo = st.columns([1, 4])
-    with col_logo:
-        if os.path.exists("logo1.png"):
-            st.image("logo1.png", width=180)
-        elif os.path.exists("logo.png"):
-            st.image("logo.png", width=180)
-
-    with col_titulo:
-        st.title("Panel de Costos de Internación")
-        st.caption(f"Archivo cargado: {nombre_archivo}")
-
-    st.divider()
-
-    # Limpieza
-    df = df_raw.dropna(how="all").dropna(how="all", axis=1).copy()
-    df.columns = [str(c).strip() for c in df.columns]
-
-    # Mapeo por coincidencia de texto
-    cols = list(df.columns)
-
-    def obtener_columna(keywords, idx_defecto):
-        for kw in keywords:
-            for c in cols:
-                if kw.lower() in c.lower():
-                    return c
-        return cols[min(idx_defecto, len(cols) - 1)]
-
-    pedido_col = obtener_columna(["pedido", "oc"], 0)
-    unid_col = obtener_columna(["unidad de negocio", "unidad"], 1)
-    carga_col = obtener_columna(["tipo de carga", "carga"], 2)
-    denom_col = obtener_columna(["denominación", "denominacion"], 4)
-    prov_col = obtener_columna(["nombre 1", "proveedor"], 5)
-    val_est_col = obtener_columna(["usd estimado", "estimado"], 6)
-    val_real_col = obtener_columna(["usd real", "valor real"], 7)
-    dif_col = obtener_columna(["diferencia"], 8)
-    sociedad_col = obtener_columna(["sociedad"], 13)
-    material_col = obtener_columna(["tipo de material", "material"], 24)
-    tm_col = obtener_columna(["tm mes real", "tm real", "tm"], 28)
-
-    # Filtrar vacíos
-    df = df[df[pedido_col].notna()].copy()
-    df[pedido_col] = df[pedido_col].astype(str).str.strip()
-
-    for c in [
-        sociedad_col,
-        material_col,
-        unid_col,
-        carga_col,
-        denom_col,
-        prov_col,
-    ]:
-        df[c] = df[c].fillna("Sin Información").astype(str).str.strip()
-
-    for c in [tm_col, val_est_col, val_real_col, dif_col]:
-        df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
-
-    # Filtros
-    st.subheader("🔍 Filtros de Búsqueda")
-    f1, f2, f3, f4 = st.columns(4)
-
-    with f1:
-        opts_soc = sorted(list(df[sociedad_col].unique()))
-        sel_soc = st.multiselect("1. Sociedad", opts_soc, default=opts_soc)
-
-    df_sub1 = df[df[sociedad_col].isin(sel_soc)]
-
-    with f2:
-        opts_uni = sorted(list(df_sub1[unid_col].unique()))
-        sel_uni = st.multiselect(
-            "2. Unidad de Negocio", opts_uni, default=opts_uni
-        )
-
-    df_sub2 = df_sub1[df_sub1[unid_col].isin(sel_uni)]
-
-    with f3:
-        opts_car = sorted(list(df_sub2[carga_col].unique()))
-        sel_car = st.multiselect(
-            "3. Tipo de Carga", opts_car, default=opts_car
-        )
-
-    df_sub3 = df_sub2[df_sub2[carga_col].isin(sel_car)]
-
-    with f4:
-        opts_mat = sorted(list(df_sub3[material_col].unique()))
-        sel_mat = st.multiselect(
-            "4. Tipo de Material", opts_mat, default=opts_mat
-        )
-
-    df_final = df_sub3[df_sub3[material_col].isin(sel_mat)].copy()
-
-    if df_final.empty:
-        st.warning("No hay datos para la combinación seleccionada.")
+# Función para cargar datos generados o reales
+@st.cache_data
+def cargar_datos(file):
+    if file is not None:
+        if file.name.endswith('.csv'):
+            return pd.read_csv(file)
+        else:
+            return pd.read_excel(file)
     else:
-        # Agrupación por pedido
-        resumen = df_final.groupby(pedido_col, as_index=False).agg(
-            Denominación=(denom_col, "first"),
-            Proveedor=(prov_col, "first"),
-            Sociedad=(sociedad_col, "first"),
-            Unidad_Negocio=(unid_col, "first"),
-            Tipo_Carga=(carga_col, "first"),
-            Tipo_Material=(material_col, "first"),
-            TM_Real=(tm_col, "first"),
-            USD_Estimado=(val_est_col, "sum"),
-            USD_Real=(val_real_col, "sum"),
-            Diferencia_USD=(dif_col, "sum"),
-        )
+        # Datos de demostración estructurados si no hay archivo cargado
+        data = {
+            'Sociedad': ['MP-PT.CR', 'MP-PT.GT', 'MP-PT.NIC', 'MP-PT.CR', 'MP-PT.GT', 'MP-PT.NIC'],
+            'Unidad_Negocio': ['DECO', 'MEGA', 'TECHO', 'TUBO', 'DECO', 'MEGA'],
+            'Tipo_Carga': ['Carga suelta', 'Contenedor', 'Carga suelta', 'Contenedor', 'Carga suelta', 'Contenedor'],
+            'Tipo_Material': ['Atad Hierro Angular', 'Bobina LE', 'Bobina LRA', 'Bobina LRC', 'Bobina LRF', 'Lámina Negra'],
+            'USD_Real': [250000, 210000, 100000, 80000, 50000, 49175.79],
+            'USD_Estimado': [200000, 190000, 110000, 60000, 40000, 11978.04],
+            'Toneladas': [12000, 10000, 5000, 3000, 2000, 1424.98]
+        }
+        return pd.DataFrame(data)
 
-        resumen["TM_Real"] = pd.to_numeric(
-            resumen["TM_Real"], errors="coerce"
-        ).fillna(0)
-        resumen["Ratio_USD_TM"] = (
-            resumen["USD_Real"] / resumen["TM_Real"]
-        ).fillna(0)
+df = cargar_datos(uploaded_file)
 
-        # KPIs
-        tm_tot = resumen["TM_Real"].sum()
-        real_tot = resumen["USD_Real"].sum()
-        est_tot = resumen["USD_Estimado"].sum()
-        ratio_gen = real_tot / tm_tot if tm_tot > 0 else 0
+# Encabezado principal del Dashboard
+col_logo, col_titulo = st.columns([1, 4])
+with col_logo:
+    # Muestra el logo desde una URL fija o imagen local si la tienes
+    st.markdown('<h2 style="color: #C00000; margin: 0;"><b>MULTI</b></h2><p style="margin: 0; font-size: 12px; color: #555;"><b>LÍDER EN ACERO</b></p>', unsafe_allow_html=True)
+with col_titulo:
+    st.title("Panel de Control de Gestión")
 
-        k1, k2, k3, k4 = st.columns(4)
-        k1.metric("USD REAL TOTAL", f"${real_tot:,.2f}")
-        k2.metric("USD ESTIMADO TOTAL", f"${est_tot:,.2f}")
-        k3.metric("TONELADAS MÉTRICAS", f"{tm_tot:,.2f} TM")
-        k4.metric("RATIO PROMEDIO", f"${ratio_gen:,.2f} /TM")
+st.markdown("---")
 
-        st.divider()
+# 2. Seccion de Filtros
+st.subheader("🔍 Filtros de Búsqueda")
+f_col1, f_col2, f_col3, f_col4 = st.columns(4)
 
-        # Gráfico
-        grp_mat = resumen.groupby("Tipo_Material", as_index=False).agg(
-            TM_Real=("TM_Real", "sum"), USD_Real=("USD_Real", "sum")
-        )
-        grp_mat["Ratio_USD_TM"] = (
-            grp_mat["USD_Real"] / grp_mat["TM_Real"]
-        ).fillna(0)
+with f_col1:
+    sociedades = st.multiselect("1. Sociedad", options=df['Sociedad'].unique(), default=df['Sociedad'].unique())
+with f_col2:
+    unidades = st.multiselect("2. Unidad de Negocio", options=df['Unidad_Negocio'].unique(), default=df['Unidad_Negocio'].unique())
+with f_col3:
+    cargas = st.multiselect("3. Tipo de Carga", options=df['Tipo_Carga'].unique(), default=df['Tipo_Carga'].unique())
+with f_col4:
+    materiales = st.multiselect("4. Tipo de Material", options=df['Tipo_Material'].unique(), default=df['Tipo_Material'].unique())
 
-        fig = px.bar(
-            grp_mat.sort_values("Ratio_USD_TM", ascending=False),
-            x="Tipo_Material",
-            y="Ratio_USD_TM",
-            title="Ratio USD REAL / TM REAL por Material",
-            text_auto=".2f",
-        )
-        st.plotly_chart(fig, use_container_width=True)
+# Filtrar DataFrame según las selecciones
+df_filtered = df[
+    (df['Sociedad'].isin(sociedades)) &
+    (df['Unidad_Negocio'].isin(unidades)) &
+    (df['Tipo_Carga'].isin(cargas)) &
+    (df['Tipo_Material'].isin(materiales))
+]
 
-        # Tabla
-        st.subheader("📋 Detalle de Pedidos")
-        st.dataframe(resumen, use_container_width=True)
+# 3. Métricas Principales (KPIs)
+st.markdown("---")
+kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 
-except Exception as err:
-    st.error(f"Se produjo un error al ejecutar la aplicación: {err}")
+total_real = df_filtered['USD_Real'].sum()
+total_est = df_filtered['USD_Estimado'].sum()
+total_tm = df_filtered['Toneladas'].sum()
+ratio_prom = (total_real / total_tm) if total_tm > 0 else 0
+
+kpi1.metric("USD REAL TOTAL", f"${total_real:,.2f}")
+kpi2.metric("USD ESTIMADO TOTAL", f"${total_est:,.2f}")
+kpi3.metric("TONELADAS MÉTRICAS", f"{total_tm:,.2f} TM")
+kpi4.metric("RATIO PROMEDIO", f"${ratio_prom:,.2f} /TM")
+
+# 4. Gráficos con Tonos Rojos y Grises
+st.markdown("---")
+st.subheader("Análisis Comparativo por Categoría")
+
+col_g1, col_g2 = st.columns(2)
+
+with col_g1:
+    # Gráfico de USD Real por Sociedad en Tonos Rojos
+    df_soc = df_filtered.groupby('Sociedad')['USD_Real'].sum().reset_index()
+    fig_real = px.bar(
+        df_soc, 
+        x='Sociedad', 
+        y='USD_Real', 
+        title="USD Real por Sociedad",
+        color_discrete_sequence=COLOR_RED_SHADES
+    )
+    fig_real.update_layout(plot_bgcolor="white", paper_bgcolor="white", font=dict(color="#333"))
+    st.plotly_chart(fig_real, use_container_width=True)
+
+with col_g2:
+    # Gráfico de USD Estimado por Sociedad en Tonos Grises
+    df_est = df_filtered.groupby('Sociedad')['USD_Estimado'].sum().reset_index()
+    fig_est = px.bar(
+        df_est, 
+        x='Sociedad', 
+        y='USD_Estimado', 
+        title="USD Estimado por Sociedad",
+        color_discrete_sequence=COLOR_GREY_SHADES
+    )
+    fig_est.update_layout(plot_bgcolor="white", paper_bgcolor="white", font=dict(color="#333"))
+    st.plotly_chart(fig_est, use_container_width=True)
