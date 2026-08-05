@@ -83,24 +83,35 @@ st.markdown(
 
 
 # 3. Carga y Limpieza de Datos
-@st.cache_data
+@st.cache_data(ttl=3600)
 def load_data():
-    file_name = "1 julio internacion_2.XLSX"
-    if not os.path.exists(file_name):
-        file_name = "1 julio internacion.XLSX"
+    file_name = None
 
-    if not os.path.exists(file_name):
+    # Búsqueda flexible de archivos Excel para evitar caídas si cambia el nombre del archivo
+    possible_files = [
+        "1 julio internacion_2.XLSX",
+        "1 julio internacion.XLSX",
+        "1 julio internacion_2.xlsx",
+        "1 julio internacion.xlsx",
+    ]
+
+    for pf in possible_files:
+        if os.path.exists(pf):
+            file_name = pf
+            break
+
+    if not file_name:
         for f in os.listdir("."):
             if "julio" in f.lower() and f.endswith((".xlsx", ".XLSX")):
                 file_name = f
                 break
 
-    df_raw = pd.read_excel(file_name)
+    if not file_name or not os.path.exists(file_name):
+        return None
 
-    # Eliminar filas y columnas totalmente vacías
+    df_raw = pd.read_excel(file_name)
     df_raw = df_raw.dropna(how="all").dropna(how="all", axis=1)
 
-    # Sanitizar nombres de columnas
     clean_cols = []
     for c in df_raw.columns:
         if pd.isna(c) or str(c).strip().lower() == "nan":
@@ -112,8 +123,15 @@ def load_data():
     return df_raw
 
 
+# Control de ejecución seguro
 try:
     df = load_data()
+
+    if df is None or df.empty:
+        st.error(
+            "⚠️ No se encontró el archivo de datos Excel en el servidor. Por favor verifica que el archivo `.XLSX` esté cargado correctamente."
+        )
+        st.stop()
 
     # Columna Pedido
     pedido_col = next(
@@ -125,13 +143,11 @@ try:
         ~df[pedido_col].isin(["nan", "None", "", "Columna_Sin_Nombre"])
     ].copy()
 
-    # Columna N (índice 13) - Sociedad
+    # Identificación segura de columnas principales
     sociedad_col = next(
         (c for c in df.columns if "sociedad" in c.lower()),
         df.columns[min(13, len(df.columns) - 1)],
     )
-
-    # Columna Y (índice 24) - Tipo de Material
     material_col = next(
         (
             c
@@ -140,8 +156,6 @@ try:
         ),
         df.columns[min(24, len(df.columns) - 1)],
     )
-
-    # Columna AC (índice 28) - TM MES REAL
     tm_col = next(
         (c for c in df.columns if "tm mes real" in c.lower()),
         next(
@@ -149,8 +163,6 @@ try:
             df.columns[min(28, len(df.columns) - 1)],
         ),
     )
-
-    # USD REAL y USD ESTIMADO
     val_real_col = next(
         (
             c
@@ -171,8 +183,6 @@ try:
         (c for c in df.columns if "diferencia" in c.lower()),
         df.columns[min(8, len(df.columns) - 1)],
     )
-
-    # Otras columnas
     unid_col = next(
         (c for c in df.columns if "unidad de negocio" in c.lower()),
         df.columns[min(1, len(df.columns) - 1)],
@@ -201,7 +211,7 @@ try:
     ]:
         df[c] = df[c].fillna("Sin Información").astype(str).str.strip()
 
-    # Conversión numérica
+    # Conversión numérica segura
     for c in [tm_col, val_est_col, val_real_col, dif_col]:
         df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
 
@@ -236,11 +246,10 @@ try:
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
-    # 5. FILTROS INDEPENDIENTES Y MULTIDIRECCIONALES (Cualquier orden)
+    # 5. FILTROS INDEPENDIENTES Y MULTIDIRECCIONALES
     with st.expander("🔍 **FILTROS DE BÚSQUEDA INTERACTIVOS**", expanded=True):
         col_f1, col_f2, col_f3, col_f4 = st.columns(4)
 
-        # Inicializar el estado de sesión si no existe
         if "f_soc" not in st.session_state:
             st.session_state.f_soc = []
         if "f_uni" not in st.session_state:
@@ -250,42 +259,79 @@ try:
         if "f_mat" not in st.session_state:
             st.session_state.f_mat = []
 
-        # Opciones dinámicas según los otros 3 filtros activos
         df_soc = df.copy()
-        if st.session_state.f_uni: df_soc = df_soc[df_soc[unid_col].isin(st.session_state.f_uni)]
-        if st.session_state.f_car: df_soc = df_soc[df_soc[carga_col].isin(st.session_state.f_car)]
-        if st.session_state.f_mat: df_soc = df_soc[df_soc[material_col].isin(st.session_state.f_mat)]
-        opts_soc = sorted([x for x in df_soc[sociedad_col].unique() if str(x) != "nan"])
+        if st.session_state.f_uni:
+            df_soc = df_soc[df_soc[unid_col].isin(st.session_state.f_uni)]
+        if st.session_state.f_car:
+            df_soc = df_soc[df_soc[carga_col].isin(st.session_state.f_car)]
+        if st.session_state.f_mat:
+            df_soc = df_soc[df_soc[material_col].isin(st.session_state.f_mat)]
+        opts_soc = sorted(
+            [x for x in df_soc[sociedad_col].unique() if str(x) != "nan"]
+        )
 
         df_uni = df.copy()
-        if st.session_state.f_soc: df_uni = df_uni[df_uni[sociedad_col].isin(st.session_state.f_soc)]
-        if st.session_state.f_car: df_uni = df_uni[df_uni[carga_col].isin(st.session_state.f_car)]
-        if st.session_state.f_mat: df_uni = df_uni[df_uni[material_col].isin(st.session_state.f_mat)]
-        opts_uni = sorted([x for x in df_uni[unid_col].unique() if str(x) != "nan"])
+        if st.session_state.f_soc:
+            df_uni = df_uni[df_uni[sociedad_col].isin(st.session_state.f_soc)]
+        if st.session_state.f_car:
+            df_uni = df_uni[df_uni[carga_col].isin(st.session_state.f_car)]
+        if st.session_state.f_mat:
+            df_uni = df_uni[df_uni[material_col].isin(st.session_state.f_mat)]
+        opts_uni = sorted(
+            [x for x in df_uni[unid_col].unique() if str(x) != "nan"]
+        )
 
         df_car = df.copy()
-        if st.session_state.f_soc: df_car = df_car[df_car[sociedad_col].isin(st.session_state.f_soc)]
-        if st.session_state.f_uni: df_car = df_car[df_car[unid_col].isin(st.session_state.f_uni)]
-        if st.session_state.f_mat: df_car = df_car[df_car[material_col].isin(st.session_state.f_mat)]
-        opts_car = sorted([x for x in df_car[carga_col].unique() if str(x) != "nan"])
+        if st.session_state.f_soc:
+            df_car = df_car[df_car[sociedad_col].isin(st.session_state.f_soc)]
+        if st.session_state.f_uni:
+            df_car = df_car[df_car[unid_col].isin(st.session_state.f_uni)]
+        if st.session_state.f_mat:
+            df_car = df_car[df_car[material_col].isin(st.session_state.f_mat)]
+        opts_car = sorted(
+            [x for x in df_car[carga_col].unique() if str(x) != "nan"]
+        )
 
         df_mat = df.copy()
-        if st.session_state.f_soc: df_mat = df_mat[df_mat[sociedad_col].isin(st.session_state.f_soc)]
-        if st.session_state.f_uni: df_mat = df_mat[df_mat[unid_col].isin(st.session_state.f_uni)]
-        if st.session_state.f_car: df_mat = df_mat[df_mat[carga_col].isin(st.session_state.f_car)]
-        opts_mat = sorted([x for x in df_mat[material_col].unique() if str(x) != "nan"])
+        if st.session_state.f_soc:
+            df_mat = df_mat[df_mat[sociedad_col].isin(st.session_state.f_soc)]
+        if st.session_state.f_uni:
+            df_mat = df_mat[df_mat[unid_col].isin(st.session_state.f_uni)]
+        if st.session_state.f_car:
+            df_mat = df_mat[df_mat[carga_col].isin(st.session_state.f_car)]
+        opts_mat = sorted(
+            [x for x in df_mat[material_col].unique() if str(x) != "nan"]
+        )
 
-        # Renderizado de filtros
         with col_f1:
-            sociedades = st.multiselect("1. Sociedad", options=opts_soc, key="f_soc", placeholder="Todas las Sociedades")
+            sociedades = st.multiselect(
+                "1. Sociedad",
+                options=opts_soc,
+                key="f_soc",
+                placeholder="Todas las Sociedades",
+            )
         with col_f2:
-            unidades = st.multiselect("2. Unidad de Negocio", options=opts_uni, key="f_uni", placeholder="Todas las Unidades")
+            unidades = st.multiselect(
+                "2. Unidad de Negocio",
+                options=opts_uni,
+                key="f_uni",
+                placeholder="Todas las Unidades",
+            )
         with col_f3:
-            cargas = st.multiselect("3. Tipo de Carga", options=opts_car, key="f_car", placeholder="Todos los Tipos")
+            cargas = st.multiselect(
+                "3. Tipo de Carga",
+                options=opts_car,
+                key="f_car",
+                placeholder="Todos los Tipos",
+            )
         with col_f4:
-            materiales = st.multiselect("4. Tipo de Material", options=opts_mat, key="f_mat", placeholder="Todos los Materiales")
+            materiales = st.multiselect(
+                "4. Tipo de Material",
+                options=opts_mat,
+                key="f_mat",
+                placeholder="Todos los Materiales",
+            )
 
-    # Aplicar filtrado final sobre el DataFrame
     df_filtered = df.copy()
     if sociedades:
         df_filtered = df_filtered[df_filtered[sociedad_col].isin(sociedades)]
@@ -320,8 +366,6 @@ try:
         detalle_pedido["TM_Real"] = pd.to_numeric(
             detalle_pedido["TM_Real"], errors="coerce"
         ).fillna(0)
-
-        # Ratio USD / TM exacto usando USD REAL
         detalle_pedido["Ratio_USD_TM"] = (
             detalle_pedido["USD_Real"] / detalle_pedido["TM_Real"]
         ).fillna(0)
@@ -348,7 +392,8 @@ try:
         c2.metric("TONELADAS MÉTRICAS", f"{total_tm_real:,.2f} TM")
         c3.metric("RATIO PROMEDIO", f"${ratio_promedio:,.2f} /TM")
         c4.metric(
-            "TIPOS DE MATERIAL", f"{materiales_activos} / {todos_materiales_base}"
+            "TIPOS DE MATERIAL",
+            f"{materiales_activos} / {todos_materiales_base}",
         )
 
         st.markdown("---")
@@ -414,7 +459,12 @@ try:
             "Ratio ($/TM)",
         ]
 
-        for col in ["USD Estimado", "USD Real", "Diferencia ($)", "Ratio ($/TM)"]:
+        for col in [
+            "USD Estimado",
+            "USD Real",
+            "Diferencia ($)",
+            "Ratio ($/TM)",
+        ]:
             detalle_tabla[col] = detalle_tabla[col].map("${:,.2f}".format)
 
         for col in ["TM Mes Real"]:
@@ -423,4 +473,4 @@ try:
         st.dataframe(detalle_tabla, use_container_width=True)
 
 except Exception as e:
-    st.error(f"Error al cargar la aplicación: {e}")
+    st.error(f"Se ha producido un error inesperado en la aplicación: {e}")
