@@ -1,136 +1,423 @@
-import streamlit as st
+import os
 import pandas as pd
 import plotly.express as px
+import streamlit as st
 
-# Configuración inicial de la página
-st.set_page_config(page_title="Dashboard Multi", layout="wide")
+# 1. Configuración de la página en modo WIDE
+st.set_page_config(
+    page_title="Panel de Costos de Internación | MULTI",
+    page_icon="🔴",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 
-# CSS personalizado para bajar el logo, dar espacio y nitidez
-st.markdown("""
+# 2. Estilos personalizados (CSS) - Ajuste de márgenes superiores
+st.markdown(
+    """
     <style>
+        /* Ocultar completamente el Sidebar y el botón del menú desplegable */
+        [data-testid="stSidebar"], [data-testid="collapsedControl"] {
+            display: none !important;
+        }
+
+        /* Margen superior adecuado para que el logo no se corte */
         .block-container {
-            padding-top: 3.5rem !important;
-            padding-bottom: 1rem !important;
+            padding-top: 3rem !important;
+            padding-bottom: 2rem !important;
+            padding-left: 2rem !important;
+            padding-right: 2rem !important;
+            max-width: 100% !important;
         }
-        .logo-text {
-            color: #C00000;
-            margin: 0;
-            font-size: 28px;
-            font-weight: bold;
-            line-height: 1;
+
+        /* Tarjetas de Indicadores (KPIs) */
+        [data-testid="stMetric"] {
+            background-color: #FFFFFF;
+            border: 1px solid #DEE2E6;
+            padding: 15px 20px;
+            border-radius: 12px;
+            box-shadow: 0px 3px 8px rgba(0,0,0,0.05);
         }
-        .slogan-text {
-            margin: 0;
-            font-size: 11px;
-            color: #444444;
-            font-weight: 600;
+        [data-testid="stMetricLabel"] {
+            color: #6C757D !important;
+            font-weight: 700;
+            font-size: 0.85rem;
             letter-spacing: 0.5px;
         }
-    </style>
-""", unsafe_allow_html=True)
-
-# Paletas de colores oficiales (Rojos para Real, Grises para Estimado)
-COLOR_RED_SHADES = ['#8B0000', '#C00000', '#E60000', '#FF4D4D', '#FF8080']
-COLOR_GREY_SHADES = ['#2B2B2B', '#4F4F4F', '#737373', '#989898', '#BD2D2']
-
-# Cargar archivo de datos en la barra lateral
-st.sidebar.header("Configuración de Datos")
-uploaded_file = st.sidebar.file_uploader("Cargar archivo Excel o CSV", type=["xlsx", "csv"])
-
-# Carga de datos optimizada sin problemas de hash/caché
-def cargar_datos(file):
-    if file is not None:
-        if file.name.endswith('.csv'):
-            return pd.read_csv(file)
-        else:
-            return pd.read_excel(file)
-    else:
-        # Datos de demostración estructurados
-        data = {
-            'Sociedad': ['MP-PT.CR', 'MP-PT.GT', 'MP-PT.NIC', 'MP-PT.CR', 'MP-PT.GT', 'MP-PT.NIC'],
-            'Unidad_Negocio': ['DECO', 'MEGA', 'TECHO', 'TUBO', 'DECO', 'MEGA'],
-            'Tipo_Carga': ['Carga suelta', 'Contenedor', 'Carga suelta', 'Contenedor', 'Carga suelta', 'Contenedor'],
-            'Tipo_Material': ['Atad Hierro Angular', 'Bobina LE', 'Bobina LRA', 'Bobina LRC', 'Bobina LRF', 'Lámina Negra'],
-            'USD_Real': [250000, 210000, 100000, 80000, 50000, 49175.79],
-            'USD_Estimado': [200000, 190000, 110000, 60000, 40000, 11978.04],
-            'Toneladas': [12000, 10000, 5000, 3000, 2000, 1424.98]
+        [data-testid="stMetricValue"] {
+            color: #1A1A1A !important;
+            font-weight: 800;
         }
-        return pd.DataFrame(data)
 
-df = cargar_datos(uploaded_file)
+        /* Tags / Pills de selección */
+        span[data-baseweb="tag"] {
+            background-color: #E30613 !important;
+        }
 
-# Encabezado principal del Dashboard (Logo y Título alineados)
-col_logo, col_titulo = st.columns([1.5, 4])
-with col_logo:
-    st.markdown('<div style="padding-top: 10px;"><p class="logo-text">MULTI</p><p class="slogan-text">LÍDER EN ACERO</p></div>', unsafe_allow_html=True)
-with col_titulo:
-    st.title("Panel de Control de Gestión")
+        /* Encabezados */
+        .main-title {
+            color: #1A1A1A;
+            font-size: 2.2rem;
+            font-weight: 800;
+            margin-bottom: 0px;
+            line-height: 1.1;
+        }
+        .sub-title {
+            color: #E30613;
+            font-size: 0.95rem;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            margin-bottom: 0px;
+        }
 
-st.markdown("---")
+        /* Separador */
+        hr {
+            border-top: 2px solid #E30613 !important;
+            margin-top: 15px;
+            margin-bottom: 25px;
+        }
+    </style>
+""",
+    unsafe_allow_html=True,
+)
 
-# 1. Sección de Filtros
-st.subheader("🔍 Filtros de Búsqueda")
-f_col1, f_col2, f_col3, f_col4 = st.columns(4)
 
-with f_col1:
-    sociedades = st.multiselect("1. Sociedad", options=df['Sociedad'].unique(), default=df['Sociedad'].unique())
-with f_col2:
-    unidades = st.multiselect("2. Unidad de Negocio", options=df['Unidad_Negocio'].unique(), default=df['Unidad_Negocio'].unique())
-with f_col3:
-    cargas = st.multiselect("3. Tipo de Carga", options=df['Tipo_Carga'].unique(), default=df['Tipo_Carga'].unique())
-with f_col4:
-    materiales = st.multiselect("4. Tipo de Material", options=df['Tipo_Material'].unique(), default=df['Tipo_Material'].unique())
+# 3. Carga y Limpieza de Datos
+@st.cache_data
+def load_data():
+    file_name = "1 julio internacion_2.XLSX"
+    if not os.path.exists(file_name):
+        file_name = "1 julio internacion.XLSX"
 
-# Filtrar DataFrame según las selecciones
-df_filtered = df[
-    (df['Sociedad'].isin(sociedades)) &
-    (df['Unidad_Negocio'].isin(unidades)) &
-    (df['Tipo_Carga'].isin(cargas)) &
-    (df['Tipo_Material'].isin(materiales))
-]
+    if not os.path.exists(file_name):
+        for f in os.listdir("."):
+            if "julio" in f.lower() and f.endswith((".xlsx", ".XLSX")):
+                file_name = f
+                break
 
-# 2. Métricas Principales (KPIs)
-st.markdown("---")
-kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+    df_raw = pd.read_excel(file_name)
 
-total_real = df_filtered['USD_Real'].sum()
-total_est = df_filtered['USD_Estimado'].sum()
-total_tm = df_filtered['Toneladas'].sum()
-ratio_prom = (total_real / total_tm) if total_tm > 0 else 0
+    # Eliminar filas y columnas totalmente vacías
+    df_raw = df_raw.dropna(how="all").dropna(how="all", axis=1)
 
-kpi1.metric("USD REAL TOTAL", f"${total_real:,.2f}")
-kpi2.metric("USD ESTIMADO TOTAL", f"${total_est:,.2f}")
-kpi3.metric("TONELADAS MÉTRICAS", f"{total_tm:,.2f} TM")
-kpi4.metric("RATIO PROMEDIO", f"${ratio_prom:,.2f} /TM")
+    # Sanitizar nombres de columnas
+    clean_cols = []
+    for c in df_raw.columns:
+        if pd.isna(c) or str(c).strip().lower() == "nan":
+            clean_cols.append("Columna_Sin_Nombre")
+        else:
+            clean_cols.append(str(c).strip())
+    df_raw.columns = clean_cols
 
-# 3. Gráficos en Tonos Rojos y Grises
-st.markdown("---")
-st.subheader("Análisis Comparativo por Categoría")
+    return df_raw
 
-col_g1, col_g2 = st.columns(2)
 
-with col_g1:
-    df_soc = df_filtered.groupby('Sociedad')['USD_Real'].sum().reset_index()
-    fig_real = px.bar(
-        df_soc, 
-        x='Sociedad', 
-        y='USD_Real', 
-        title="USD Real por Sociedad",
-        color='Sociedad',
-        color_discrete_sequence=COLOR_RED_SHADES
+try:
+    df = load_data()
+
+    # Columna Pedido
+    pedido_col = next(
+        (c for c in df.columns if "pedido" in c.lower()), df.columns[0]
     )
-    fig_real.update_layout(plot_bgcolor="white", paper_bgcolor="white", font=dict(color="#333"), showlegend=False)
-    st.plotly_chart(fig_real, use_container_width=True)
+    df = df[df[pedido_col].notna()].copy()
+    df[pedido_col] = df[pedido_col].astype(str).str.strip()
+    df = df[
+        ~df[pedido_col].isin(["nan", "None", "", "Columna_Sin_Nombre"])
+    ].copy()
 
-with col_g2:
-    df_est = df_filtered.groupby('Sociedad')['USD_Estimado'].sum().reset_index()
-    fig_est = px.bar(
-        df_est, 
-        x='Sociedad', 
-        y='USD_Estimado', 
-        title="USD Estimado por Sociedad",
-        color='Sociedad',
-        color_discrete_sequence=COLOR_GREY_SHADES
+    # Columna N (índice 13) - Sociedad
+    sociedad_col = next(
+        (c for c in df.columns if "sociedad" in c.lower()),
+        df.columns[min(13, len(df.columns) - 1)],
     )
-    fig_est.update_layout(plot_bgcolor="white", paper_bgcolor="white", font=dict(color="#333"), showlegend=False)
-    st.plotly_chart(fig_est, use_container_width=True)
+
+    # Columna Y (índice 24) - Tipo de Material
+    material_col = next(
+        (
+            c
+            for c in df.columns
+            if "tipo de material" in c.lower() or "material" in c.lower()
+        ),
+        df.columns[min(24, len(df.columns) - 1)],
+    )
+
+    # Columna AC (índice 28) - TM MES REAL
+    tm_col = next(
+        (c for c in df.columns if "tm mes real" in c.lower()),
+        next(
+            (c for c in df.columns if "tm" in c.lower()),
+            df.columns[min(28, len(df.columns) - 1)],
+        ),
+    )
+
+    # USD REAL y USD ESTIMADO
+    val_real_col = next(
+        (
+            c
+            for c in df.columns
+            if "usd real" in c.lower() or "valor real" in c.lower()
+        ),
+        df.columns[min(7, len(df.columns) - 1)],
+    )
+    val_est_col = next(
+        (
+            c
+            for c in df.columns
+            if "usd estimado" in c.lower() or "estimado" in c.lower()
+        ),
+        df.columns[min(6, len(df.columns) - 1)],
+    )
+    dif_col = next(
+        (c for c in df.columns if "diferencia" in c.lower()),
+        df.columns[min(8, len(df.columns) - 1)],
+    )
+
+    # Otras columnas
+    unid_col = next(
+        (c for c in df.columns if "unidad de negocio" in c.lower()),
+        df.columns[min(1, len(df.columns) - 1)],
+    )
+    carga_col = next(
+        (c for c in df.columns if "tipo de carga" in c.lower()),
+        df.columns[min(2, len(df.columns) - 1)],
+    )
+    denom_col = next(
+        (c for c in df.columns if "denominación" in c.lower()),
+        df.columns[min(4, len(df.columns) - 1)],
+    )
+    prov_col = next(
+        (c for c in df.columns if "nombre 1" in c.lower()),
+        df.columns[min(5, len(df.columns) - 1)],
+    )
+
+    # Normalización de textos
+    for c in [
+        sociedad_col,
+        material_col,
+        unid_col,
+        carga_col,
+        denom_col,
+        prov_col,
+    ]:
+        df[c] = df[c].fillna("Sin Información").astype(str).str.strip()
+
+    # Conversión numérica
+    for c in [tm_col, val_est_col, val_real_col, dif_col]:
+        df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
+
+    # 4. ENCABEZADO CON LOGO COMPLETO Y ALINEADO
+    col_logo, col_titulo = st.columns([1, 4], vertical_alignment="center")
+
+    with col_logo:
+        if os.path.exists("logo1.png"):
+            st.image("logo1.png", use_container_width=True)
+        elif os.path.exists("logo.png"):
+            st.image("logo.png", use_container_width=True)
+        else:
+            st.markdown(
+                """
+                <div style="background-color: #E30613; padding: 12px; border-radius: 8px; text-align: center;">
+                    <h2 style="color: white !important; margin: 0; font-weight: 900; font-size: 22px;">↗ MULTI</h2>
+                    <span style="color: white !important; font-size: 9px; font-weight: 700; letter-spacing: 2px;">LÍDER EN ACERO</span>
+                </div>
+            """,
+                unsafe_allow_html=True,
+            )
+
+    with col_titulo:
+        st.markdown(
+            '<p class="main-title">Panel de Costos de Internación</p>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            '<p class="sub-title">Análisis Operativo y Nacionalización de Acero</p>',
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    # 5. FILTROS EN CASCADA (DEPENDIENTES)
+    with st.expander("🔍 **FILTROS DE BÚSQUEDA (CASCADA)**", expanded=True):
+        col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+
+        # Nivel 1: Sociedad
+        with col_f1:
+            sociedades_opt = sorted(
+                [x for x in df[sociedad_col].unique() if str(x) != "nan"]
+            )
+            sociedades = st.multiselect(
+                "1. Sociedad", options=sociedades_opt, default=sociedades_opt
+            )
+
+        # Filtrado para Nivel 2
+        df_lvl1 = df[df[sociedad_col].isin(sociedades)]
+
+        # Nivel 2: Unidad de Negocio
+        with col_f2:
+            unidades_opt = sorted(
+                [x for x in df_lvl1[unid_col].unique() if str(x) != "nan"]
+            )
+            unidades = st.multiselect(
+                "2. Unidad de Negocio",
+                options=unidades_opt,
+                default=unidades_opt,
+            )
+
+        # Filtrado para Nivel 3
+        df_lvl2 = df_lvl1[df_lvl1[unid_col].isin(unidades)]
+
+        # Nivel 3: Tipo de Carga
+        with col_f3:
+            cargas_opt = sorted(
+                [x for x in df_lvl2[carga_col].unique() if str(x) != "nan"]
+            )
+            cargas = st.multiselect(
+                "3. Tipo de Carga", options=cargas_opt, default=cargas_opt
+            )
+
+        # Filtrado para Nivel 4
+        df_lvl3 = df_lvl2[df_lvl2[carga_col].isin(cargas)]
+
+        # Nivel 4: Tipo de Material
+        with col_f4:
+            materiales_opt = sorted(
+                [x for x in df_lvl3[material_col].unique() if str(x) != "nan"]
+            )
+            materiales = st.multiselect(
+                "4. Tipo de Material",
+                options=materiales_opt,
+                default=materiales_opt,
+            )
+
+    # Filtro final aplicado
+    df_filtered = df_lvl3[df_lvl3[material_col].isin(materiales)].copy()
+
+    if df_filtered.empty:
+        st.warning(
+            "No hay registros disponibles para la combinación de filtros seleccionada."
+        )
+    else:
+        # 6. Agrupación por Pedido
+        detalle_pedido = df_filtered.groupby(
+            pedido_col, as_index=False
+        ).agg(
+            Denominación=(denom_col, "first"),
+            Proveedor=(prov_col, "first"),
+            Sociedad=(sociedad_col, "first"),
+            Unidad_Negocio=(unid_col, "first"),
+            Tipo_Carga=(carga_col, "first"),
+            Tipo_Material=(material_col, "first"),
+            TM_Real=(tm_col, "first"),
+            USD_Estimado=(val_est_col, "sum"),
+            USD_Real=(val_real_col, "sum"),
+            Diferencia_USD=(dif_col, "sum"),
+        )
+
+        detalle_pedido["TM_Real"] = pd.to_numeric(
+            detalle_pedido["TM_Real"], errors="coerce"
+        ).fillna(0)
+
+        # Ratio USD / TM exacto usando USD REAL
+        detalle_pedido["Ratio_USD_TM"] = (
+            detalle_pedido["USD_Real"] / detalle_pedido["TM_Real"]
+        ).fillna(0)
+
+        # 7. Indicadores (KPIs)
+        total_oc = detalle_pedido[pedido_col].nunique()
+        total_tm_real = detalle_pedido["TM_Real"].sum()
+        total_usd_real = detalle_pedido["USD_Real"].sum()
+        total_usd_est = detalle_pedido["USD_Estimado"].sum()
+
+        # Ratio Promedio General = Suma USD REAL / Suma TM REAL
+        ratio_promedio = (
+            total_usd_real / total_tm_real if total_tm_real > 0 else 0
+        )
+        materiales_activos = detalle_pedido["Tipo_Material"].nunique()
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric(
+            "USD REAL TOTAL",
+            f"${total_usd_real:,.2f}",
+            delta=f"Vs Est. ${total_usd_est:,.2f}",
+            delta_color="off",
+        )
+        c2.metric("TONELADAS MÉTRICAS", f"{total_tm_real:,.2f} TM")
+        c3.metric("RATIO PROMEDIO", f"${ratio_promedio:,.2f} /TM")
+        c4.metric(
+            "TIPOS DE MATERIAL", f"{materiales_activos} / {len(materiales_opt)}"
+        )
+
+        st.markdown("---")
+
+        # 8. Gráfico por Tipo de Material basado en USD REAL / TM REAL
+        grp_mat = detalle_pedido.groupby("Tipo_Material", as_index=False).agg(
+            TM_Real=("TM_Real", "sum"), USD_Real=("USD_Real", "sum")
+        )
+        grp_mat["Ratio_USD_TM"] = (
+            grp_mat["USD_Real"] / grp_mat["TM_Real"]
+        ).fillna(0)
+
+        custom_red_grey_scale = [
+            "#8D99AE",
+            "#ADB5BD",
+            "#E63946",
+            "#E30613",
+            "#990000",
+        ]
+
+        fig = px.bar(
+            grp_mat.sort_values("Ratio_USD_TM", ascending=False),
+            x="Tipo_Material",
+            y="Ratio_USD_TM",
+            title="Costos por Tonelada Métrica (USD REAL / TM REAL) según Tipo de Material",
+            labels={
+                "Ratio_USD_TM": "USD REAL / TM Real",
+                "Tipo_Material": "Tipo de Material",
+            },
+            text_auto=".2f",
+            color="Ratio_USD_TM",
+            color_continuous_scale=custom_red_grey_scale,
+        )
+
+        fig.update_layout(
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)",
+            font=dict(family="Arial, sans-serif", size=12, color="#212529"),
+            title_font=dict(size=18, color="#1A1A1A"),
+            xaxis=dict(showgrid=False),
+            yaxis=dict(showgrid=True, gridcolor="#E9ECEF"),
+            coloraxis_showscale=False,
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+        # 9. Tabla Detallada a Pantalla Completa
+        st.subheader("📋 Detalle de Costos por Pedido (OC) y Denominación")
+
+        detalle_tabla = detalle_pedido.copy()
+        detalle_tabla.columns = [
+            "Pedido (OC)",
+            "Denominación",
+            "Proveedor",
+            "Sociedad",
+            "Unidad Negocio",
+            "Tipo Carga",
+            "Tipo Material",
+            "TM Mes Real",
+            "USD Estimado",
+            "USD Real",
+            "Diferencia ($)",
+            "Ratio ($/TM)",
+        ]
+
+        # Formato numérico en la tabla
+        for col in ["USD Estimado", "USD Real", "Diferencia ($)", "Ratio ($/TM)"]:
+            detalle_tabla[col] = detalle_tabla[col].map("${:,.2f}".format)
+
+        for col in ["TM Mes Real"]:
+            detalle_tabla[col] = detalle_tabla[col].map("{:,.2f}".format)
+
+        st.dataframe(detalle_tabla, use_container_width=True)
+
+except Exception as e:
+    st.error(f"Error al cargar la aplicación: {e}")
