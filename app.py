@@ -5,32 +5,39 @@ import plotly.express as px
 # Configuración inicial de la página
 st.set_page_config(page_title="Dashboard Multi", layout="wide")
 
-# CSS personalizado para bajar el logo, ajustar la interfaz y darle nitidez
+# CSS personalizado para bajar el logo, dar espacio y nitidez
 st.markdown("""
     <style>
         .block-container {
             padding-top: 3.5rem !important;
             padding-bottom: 1rem !important;
         }
-        .logo-img {
-            margin-top: 15px;
-            margin-bottom: 15px;
-            image-rendering: -webkit-optimize-contrast;
-            image-rendering: crisp-edges;
+        .logo-text {
+            color: #C00000;
+            margin: 0;
+            font-size: 28px;
+            font-weight: bold;
+            line-height: 1;
+        }
+        .slogan-text {
+            margin: 0;
+            font-size: 11px;
+            color: #444444;
+            font-weight: 600;
+            letter-spacing: 0.5px;
         }
     </style>
 """, unsafe_allow_html=True)
 
 # Paletas de colores oficiales (Rojos para Real, Grises para Estimado)
-COLOR_RED_SHADES = ['#8B0000', '#C00000', '#FF0000', '#FF4D4D', '#FF8080']
-COLOR_GREY_SHADES = ['#333333', '#555555', '#777777', '#999999', '#BBBBBB']
+COLOR_RED_SHADES = ['#8B0000', '#C00000', '#E60000', '#FF4D4D', '#FF8080']
+COLOR_GREY_SHADES = ['#2B2B2B', '#4F4F4F', '#737373', '#989898', '#BD2D2']
 
-# 1. Cargar archivo de datos en la barra lateral
+# Cargar archivo de datos en la barra lateral
 st.sidebar.header("Configuración de Datos")
-uploaded_file = st.sidebar.file_drop_here if hasattr(st.sidebar, "file_drop_here") else st.sidebar.file_uploader("Cargar archivo Excel o CSV", type=["xlsx", "csv"])
+uploaded_file = st.sidebar.file_uploader("Cargar archivo Excel o CSV", type=["xlsx", "csv"])
 
-# Función para cargar datos generados o reales
-@st.cache_data
+# Carga de datos optimizada sin problemas de hash/caché
 def cargar_datos(file):
     if file is not None:
         if file.name.endswith('.csv'):
@@ -38,7 +45,7 @@ def cargar_datos(file):
         else:
             return pd.read_excel(file)
     else:
-        # Datos de demostración estructurados si no hay archivo cargado
+        # Datos de demostración estructurados
         data = {
             'Sociedad': ['MP-PT.CR', 'MP-PT.GT', 'MP-PT.NIC', 'MP-PT.CR', 'MP-PT.GT', 'MP-PT.NIC'],
             'Unidad_Negocio': ['DECO', 'MEGA', 'TECHO', 'TUBO', 'DECO', 'MEGA'],
@@ -52,17 +59,16 @@ def cargar_datos(file):
 
 df = cargar_datos(uploaded_file)
 
-# Encabezado principal del Dashboard
-col_logo, col_titulo = st.columns([1, 4])
+# Encabezado principal del Dashboard (Logo y Título alineados)
+col_logo, col_titulo = st.columns([1.5, 4])
 with col_logo:
-    # Muestra el logo desde una URL fija o imagen local si la tienes
-    st.markdown('<h2 style="color: #C00000; margin: 0;"><b>MULTI</b></h2><p style="margin: 0; font-size: 12px; color: #555;"><b>LÍDER EN ACERO</b></p>', unsafe_allow_html=True)
+    st.markdown('<div style="padding-top: 10px;"><p class="logo-text">MULTI</p><p class="slogan-text">LÍDER EN ACERO</p></div>', unsafe_allow_html=True)
 with col_titulo:
     st.title("Panel de Control de Gestión")
 
 st.markdown("---")
 
-# 2. Seccion de Filtros
+# 1. Sección de Filtros
 st.subheader("🔍 Filtros de Búsqueda")
 f_col1, f_col2, f_col3, f_col4 = st.columns(4)
 
@@ -83,7 +89,7 @@ df_filtered = df[
     (df['Tipo_Material'].isin(materiales))
 ]
 
-# 3. Métricas Principales (KPIs)
+# 2. Métricas Principales (KPIs)
 st.markdown("---")
 kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 
@@ -97,34 +103,34 @@ kpi2.metric("USD ESTIMADO TOTAL", f"${total_est:,.2f}")
 kpi3.metric("TONELADAS MÉTRICAS", f"{total_tm:,.2f} TM")
 kpi4.metric("RATIO PROMEDIO", f"${ratio_prom:,.2f} /TM")
 
-# 4. Gráficos con Tonos Rojos y Grises
+# 3. Gráficos en Tonos Rojos y Grises
 st.markdown("---")
 st.subheader("Análisis Comparativo por Categoría")
 
 col_g1, col_g2 = st.columns(2)
 
 with col_g1:
-    # Gráfico de USD Real por Sociedad en Tonos Rojos
     df_soc = df_filtered.groupby('Sociedad')['USD_Real'].sum().reset_index()
     fig_real = px.bar(
         df_soc, 
         x='Sociedad', 
         y='USD_Real', 
         title="USD Real por Sociedad",
+        color='Sociedad',
         color_discrete_sequence=COLOR_RED_SHADES
     )
-    fig_real.update_layout(plot_bgcolor="white", paper_bgcolor="white", font=dict(color="#333"))
+    fig_real.update_layout(plot_bgcolor="white", paper_bgcolor="white", font=dict(color="#333"), showlegend=False)
     st.plotly_chart(fig_real, use_container_width=True)
 
 with col_g2:
-    # Gráfico de USD Estimado por Sociedad en Tonos Grises
     df_est = df_filtered.groupby('Sociedad')['USD_Estimado'].sum().reset_index()
     fig_est = px.bar(
         df_est, 
         x='Sociedad', 
         y='USD_Estimado', 
         title="USD Estimado por Sociedad",
+        color='Sociedad',
         color_discrete_sequence=COLOR_GREY_SHADES
     )
-    fig_est.update_layout(plot_bgcolor="white", paper_bgcolor="white", font=dict(color="#333"))
+    fig_est.update_layout(plot_bgcolor="white", paper_bgcolor="white", font=dict(color="#333"), showlegend=False)
     st.plotly_chart(fig_est, use_container_width=True)
